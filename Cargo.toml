@@ -1,0 +1,36 @@
+[package]
+name = "dcpu16"
+version = "0.0.1"
+authors = ["Gustav Larsson <gustav.m.larsson@gmail.com>"]
+
+[dependencies]
+getopts = "0.2"
+
+[lib]
+name = "dcpu16"
+path = "src/lib.rs"
+test = false
+doctest = false
+
+[[bin]]
+name = "emulator"
+path = "src/bin/emulator.rs"
+test = false
+
+[[bin]]
+name = "assembler"
+path = "src/bin/assembler.rs"
+test = false
+
+[[bin]]
+name = "disassembler"
+path = "src/bin/disassembler.rs"
+test = false
+
+[[bin]]
+name = "tokenizer"
+path = "src/bin/tokenizer.rs"
+test = false
+
+[[test]]
+name = "tests"
