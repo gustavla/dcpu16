@@ -2,6 +2,11 @@
 name = "dcpu16"
 version = "0.0.1"
 authors = ["Gustav Larsson <gustav.m.larsson@gmail.com>"]
+description = "DCPU-16 assembler, disassembler and emulator"
+repository = "https://github.com/gustavla/dcpu16"
+readme = "README.md"
+keywords = ["dcpu16", "cpu", "emulator", "simulator", "assembler"]
+license = "MIT"
 
 [dependencies]
 getopts = "0.2"
