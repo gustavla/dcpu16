@@ -3,6 +3,7 @@ extern crate getopts;
 
 use std::io::prelude::*;
 use std::io::{BufReader,BufWriter};
+use std::error::Error;
 use std::fs::File;
 use std::path::Path;
 use std::env;
@@ -33,7 +34,11 @@ fn main() {
     let x: &[_] = &[' ', '\n', '\t'];
     let path = Path::new(filename);
     let file = match File::open(&path) {
-        Err(_) => panic!(""),//Could not open file {}: {}", path.display(), Exception::description(&why)),
+        Err(why) => {
+            println!("Could not open file {}: {}", path.display(), why.description());
+            //std::os::set_exit_status(1);
+            return;
+        },
         Ok(file) => file,
     };
     for line in BufReader::new(&file).lines() {

@@ -438,7 +438,6 @@ impl DCPU {
                 // Temporary printing
                 // OUT p  (prints memory address p as a null-terminated string)
                 let a = self.get(id_a, true, true);
-                // TODO: The following needs parens for some reason
                 for i in 0..MEMORY_SIZE {
                     let c = self.mem[((a + i as u16) as u16) as usize];
                     if c == 0 {

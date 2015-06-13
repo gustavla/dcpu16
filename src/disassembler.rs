@@ -82,6 +82,10 @@ fn opcode_str(opcode: usize) -> Result<&'static str, ()> {
         IFA => Ok("IFA"),
         IFL => Ok("IFL"),
         IFU => Ok("IFU"),
+        ADX => Ok("ADX"),
+        SBX => Ok("SBX"),
+        STI => Ok("STI"),
+        STD => Ok("STD"),
         _ => Err(()),
     }
 }
