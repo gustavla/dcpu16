@@ -1,6 +1,6 @@
 [package]
 name = "dcpu16"
-version = "0.0.1"
+version = "0.0.2"
 authors = ["Gustav Larsson <gustav.m.larsson@gmail.com>"]
 description = "DCPU-16 assembler, disassembler and emulator"
 repository = "https://github.com/gustavla/dcpu16"
