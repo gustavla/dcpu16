@@ -38,7 +38,7 @@ More info about the DCPU-16:
 * assembler
   * `$ assembler program.asm -o program.bin`
 * disassembler
-  * `$ disassembler -c program.bin`
+  * `$ disassembler program.bin`
 * tokenizer
   * `$ tokenizer program.bin`
 * emulator

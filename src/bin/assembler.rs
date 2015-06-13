@@ -15,8 +15,11 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     opts.optopt("o", "output", "output", "OUTPUT");
     let matches = match opts.parse(&args[1..]) {
-        Ok(m) => { m },
-        Err(f) => { panic!(f.to_string()) },
+        Ok(m) => m,
+        Err(why) => {
+            println!("{}", why);
+            return;
+        },
     };
 
     if matches.free.len() != 1 {
@@ -36,7 +39,6 @@ fn main() {
     let file = match File::open(&path) {
         Err(why) => {
             println!("Could not open file {}: {}", path.display(), why.description());
-            //std::os::set_exit_status(1);
             return;
         },
         Ok(file) => file,
@@ -56,7 +58,10 @@ fn main() {
     match ret {
         Ok(_) => {
             let file = match File::create(&Path::new(&output_filename)) {
-                Err(_) => panic!(""),//Could not open file {}: {}", path.display(), Error::description(&why)),
+                Err(why) => {
+                    println!("Could not open file {}: {}", path.display(), why.description());
+                    return;
+                },
                 Ok(f) => f,
             };
             let mut writer = BufWriter::new(&file);

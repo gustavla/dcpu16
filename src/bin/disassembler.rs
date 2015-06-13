@@ -4,6 +4,7 @@ extern crate getopts;
 use std::env;
 use std::fs::File;
 use std::io::Read;
+use std::error::Error;
 use std::path::Path;
 use getopts::Options;
 use dcpu16::dcpu;
@@ -12,24 +13,30 @@ use dcpu16::disassembler;
 fn main() {
     let mut opts = Options::new();
     let args: Vec<String> = env::args().collect();
-    opts.optflag("c", "color", "color");
+    opts.optflag("m", "no-color", "no color");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
-        Err(f) => { panic!(f.to_string()) },
+        Err(why) => {
+            println!("{}", why);
+            return;
+        },
     };
 
     if matches.free.len() != 1 {
         println!("Please input file");
         return;
     }
-    let color = matches.opt_present("c");
+    let color = !matches.opt_present("m");
     let ref filename = matches.free[0];
 
     let mut cpu = dcpu::DCPU::new();
 
     let path = Path::new(filename);
     let mut file = match File::open(&path) {
-        Err(_) => panic!(""),//Could not open file {}: {}", path.display(), Error::description(&why)),
+        Err(why) => {
+            println!("Could not open file {}: {}", path.display(), why.description());
+            return;
+        },
         Ok(f) => f,
     };
 
@@ -51,9 +58,10 @@ fn main() {
                 j += 1;
             }
         }
-        Err(_) => {
-            panic!("Could not read contents of file");
-        }
+        Err(why) => {
+            println!("Could not read contents of file: {}", why);
+            return;
+        },
     }
 
     loop {
