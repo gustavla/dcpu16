@@ -6,33 +6,43 @@ pub const MEMORY_SIZE: usize = 65536;
 
 const SHOW_ROWS_RADIUS: usize = 1;
 
-/*
-trait Hardware {
-    fn info_hardware_id_upper() -> usize;
-    fn info_hardware_id_lower() -> usize;
-    fn info_manufacturer_id_upper() -> usize;
-    fn info_manufacturer_id_lower() -> usize;
-    fn info_version() -> usize;
-    fn process_interrupt(cpu: &mut DCPU) -> ();
+pub trait Hardware {
+    fn info_hardware_id_upper(&self) -> u16;
+    fn info_hardware_id_lower(&self) -> u16;
+    fn info_manufacturer_id_upper(&self) -> u16;
+    fn info_manufacturer_id_lower(&self) -> u16;
+    fn info_version(&self) -> u16;
+    fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
 }
 
 pub struct HWMonitorLEM1802 {
-    connected: bool,
-    ram_location: u16,
+    pub connected: bool,
+    pub ram_location: u16,
 }
 
 impl Hardware for HWMonitorLEM1802 {
-    fn info_hardware_id_upper() -> usize { 0x7349 }
-    fn info_hardware_id_lower() -> usize { 0xf615 }
-    fn info_manufacturer_id_upper() -> usize { 0x1c6c }
-    fn info_manufacturer_id_lower() -> usize { 0x8b36 }
-    fn info_version() -> usize { 0x1802 }
+    fn info_hardware_id_upper(&self) -> u16 { 0x7349 }
+    fn info_hardware_id_lower(&self) -> u16 { 0xf615 }
+    fn info_manufacturer_id_upper(&self) -> u16 { 0x1c6c }
+    fn info_manufacturer_id_lower(&self) -> u16 { 0x8b36 }
+    fn info_version(&self) -> u16 { 0x1802 }
 
-    fn process_interrupt(cpu: &mut DCPU) -> () {
-
+    fn process_interrupt(&mut self, cpu: &mut DCPU) -> () {
+        let a = cpu.reg[0];
+        let b = cpu.reg[1];
+        match a {
+            0 => { /* MEM_MAP_SCREEN */
+                if b > 0 {
+                    self.ram_location = b;
+                    self.connected = true;
+                } else {
+                    self.connected = false;
+                }
+            },
+            _ => {}
+        }
     }
 }
-*/
 
 pub struct DCPU {
     pub terminate: bool,
@@ -44,7 +54,7 @@ pub struct DCPU {
     ia: u16,
     skip_next: bool,
     cycle: usize,
-    //devices: Vec<Hardware + 'static>,
+    pub devices: Vec<Box<Hardware>>,
 }
 
 impl DCPU {
@@ -59,7 +69,7 @@ impl DCPU {
             ia: 0,
             skip_next: false,
             cycle: 0,
-            //devices: vec!(),
+            devices: Vec::new(),
         }
     }
 
@@ -434,6 +444,49 @@ impl DCPU {
                 self.mem[self.sp as usize] = self.pc + 1;
                 self.pc = self.get(id_a, true, true);
             },
+
+            HWN => {
+                self.cycle += 2;
+                let n_devices = self.devices.len() as u16;
+                self.set(id_a, n_devices);
+            },
+            HWQ => {
+                self.cycle += 4;
+                let device_id = self.get(id_a, true, true) as usize;
+                //let n_devices = self.devices.len() as u16;
+                //
+                let (i1, i2, i3, i4, i5) = match self.devices.get(device_id) {
+                    Some(d) => {
+                        (d.info_hardware_id_lower(),
+                         d.info_hardware_id_upper(),
+                         d.info_version(),
+                         d.info_manufacturer_id_lower(),
+                         d.info_manufacturer_id_upper())
+                    },
+                    None => {
+                        (0, 0, 0, 0, 0)
+                    },
+                };
+                self.set(0, i1);
+                self.set(1, i2);
+                self.set(2, i3);
+                self.set(3, i4);
+                self.set(4, i5);
+            },
+            HWI => {
+                self.cycle += 4;
+                let device_id = self.get(id_a, true, true) as usize;
+                // TODO: I have to remove the device and then add it back in
+                //       I'm sure there is a better way to do this.
+                //       Also, instead of this if statement, perhaps catch 
+                //       the panic potentially returned by remove.
+                if device_id < self.devices.len() {
+                    let mut device = self.devices.remove(device_id);
+                    device.process_interrupt(self);
+                    self.devices.insert(device_id, device);
+                }
+            },
+            /* Extensions */
             OUT => {
                 // Temporary printing
                 // OUT p  (prints memory address p as a null-terminated string)

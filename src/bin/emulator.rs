@@ -17,7 +17,10 @@ fn main() {
     opts.optflag("p", "print", "print");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
-        Err(f) => { panic!(f.to_string()) },
+        Err(why) => {
+            println!("{}", why);
+            return;
+        },
     };
 
     if matches.free.len() != 1 {
@@ -31,7 +34,10 @@ fn main() {
 
     let path = Path::new(filename);
     let mut file = match File::open(&path) {
-        Err(_) => panic!(""),//Could not open file {}: {}", path.display(), Exception::description(&why)),
+        Err(why) => {
+            println!("Could not open file {}: {}", path.display(), why.description());
+            return;
+        },
         Ok(file) => file,
     };
     let mut i = 0;
@@ -52,19 +58,15 @@ fn main() {
                 j += 1;
             }
         }
-        Err(_) => {
-            panic!("Could not read contents of file");
-        }
+        Err(why) => {
+            println!("Could not read contents of file: {}", why);
+            return;
+        },
     }
 
-    //let input = io::stdin().read_char().ok().expect("Failed to read line");
+    // Connect hardware
+    cpu.devices.push(Box::new(dcpu::HWMonitorLEM1802{connected: false, ram_location: 0}));
 
-    /*for i in buf.iter() {
-        println!(":{}", i);
-    }
-    */
-
-    //let mut j = 0;
     loop {
         let (_, s) = disassembler::disassemble_instruction(&cpu, true);
         if print {
@@ -76,11 +78,5 @@ fn main() {
         if cpu.terminate {
             break;
         }
-
-        //j += 1;
     }
-
-    /*
-    println!("{}", input);
-    */
 }
