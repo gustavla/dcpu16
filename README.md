@@ -7,6 +7,10 @@ More info about the DCPU-16:
 * https://en.wikipedia.org/wiki/0x10c
 * https://raw.githubusercontent.com/gatesphere/demi-16/master/docs/dcpu-specs/dcpu-1-7.txt
 
+To run DCPU-16 programs with hardware devices (such as a monitor), see:
+
+* [dcpu16-gui](https://github.com/gustavla/dcpu16-gui)
+
 ## Completed features
 
 * Assembler
