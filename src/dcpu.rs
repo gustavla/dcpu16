@@ -28,7 +28,7 @@ pub trait Hardware {
     fn info_version(&self) -> u16;
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
 
-    fn get_data(&self, cpu: &DCPU) -> Vec<u16>;
+    fn get_data(&self, cpu: &DCPU) -> Vec<u8>;
 }
 
 pub struct HWMonitorLEM1802 {
@@ -59,7 +59,7 @@ impl Hardware for HWMonitorLEM1802 {
         }
     }
 
-    fn get_data(&self, _: &DCPU) -> Vec<u16> {
+    fn get_data(&self, _: &DCPU) -> Vec<u8> {
         Vec::new()
     }
 }
@@ -295,10 +295,10 @@ impl DCPU {
             0x18 => {
                 if is_a {
                     let oldsp = self.sp;
-                    self.sp += 1;
+                    self.sp = (((self.sp as usize) + 1) % MEMORY_SIZE) as u16;
                     self.mem[oldsp as usize]
                 } else {
-                    self.sp -= 1;
+                    self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
                     self.mem[self.sp as usize]
                 }
             },
@@ -577,7 +577,7 @@ impl DCPU {
             },
             JSR => {
                 self.cycle += 3;
-                self.sp -= 1;
+                self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
                 self.mem[self.sp as usize] = self.pc + 1;
                 self.pc = self.get(id_a, true, true);
             },
