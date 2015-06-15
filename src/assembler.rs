@@ -536,6 +536,8 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
     match *ttype {
         TokenType::NumericLiteral(value) => {
             // Can't have numeric literals as lvalues
+            /*
+            TODO: Disabled, since sometimes permissble, such as with IF*
             if lvalue {
                 return Err(ParsingError{line: line_no,
                                         col: tokens[*cur].col,
@@ -543,6 +545,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                         global: false,
                                         etype: ParsingErrorType::IllegalLvalue});
             }
+            */
             *cur += 1;
             Ok(try!(process_value(value)))
         },
