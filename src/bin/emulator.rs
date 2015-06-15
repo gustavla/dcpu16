@@ -3,6 +3,7 @@ extern crate getopts;
 
 use std::vec::Vec;
 use std::path::Path;
+use std::error::Error;
 use std::fs::File;
 use std::io::Read;
 use std::env;
@@ -65,7 +66,13 @@ fn main() {
     }
 
     // Connect hardware
-    cpu.devices.push(Box::new(dcpu::HWMonitorLEM1802{connected: false, ram_location: 0}));
+    //cpu.devices.push(Box::new(dcpu::HWMonitorLEM1802{connected: false, ram_location: 0}));
+    /*
+    let mut floppy = Box::new(dcpu::HWFloppyM35FD::new());
+    floppy.sectors.push(dcpu::HWFloppyM35FDSector{mem: [1; 512]});
+    floppy.state = 1;
+    cpu.devices.push(floppy);
+    */
 
     loop {
         let (_, s) = disassembler::disassemble_instruction(&cpu, true);

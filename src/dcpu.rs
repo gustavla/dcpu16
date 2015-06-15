@@ -4,6 +4,15 @@ use instructions::*;
 
 pub const MEMORY_SIZE: usize = 65536;
 
+pub const REG_A: usize = 0;
+pub const REG_B: usize = 1;
+pub const REG_C: usize = 2;
+pub const REG_X: usize = 3;
+pub const REG_Y: usize = 4;
+pub const REG_Z: usize = 5;
+pub const REG_I: usize = 6;
+pub const REG_J: usize = 7;
+
 const SHOW_ROWS_RADIUS: usize = 1;
 
 pub trait Hardware {
@@ -13,6 +22,8 @@ pub trait Hardware {
     fn info_manufacturer_id_lower(&self) -> u16;
     fn info_version(&self) -> u16;
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
+
+    fn get_data(&self, cpu: &DCPU) -> Vec<u16>;
 }
 
 pub struct HWMonitorLEM1802 {
@@ -28,8 +39,8 @@ impl Hardware for HWMonitorLEM1802 {
     fn info_version(&self) -> u16 { 0x1802 }
 
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> () {
-        let a = cpu.reg[0];
-        let b = cpu.reg[1];
+        let a = cpu.reg[REG_A];
+        let b = cpu.reg[REG_B];
         match a {
             0 => { /* MEM_MAP_SCREEN */
                 if b > 0 {
@@ -42,7 +53,128 @@ impl Hardware for HWMonitorLEM1802 {
             _ => {}
         }
     }
+
+    fn get_data(&self, _: &DCPU) -> Vec<u16> {
+        Vec::new()
+    }
 }
+
+/*
+const FLOPPY_MEMORY_SIZE: usize = 737280;
+const FLOPPY_SECTOR_SIZE: usize = 512;
+
+pub struct HWFloppyM35FDSector {
+    pub mem: [u16; FLOPPY_SECTOR_SIZE],
+}
+
+pub struct HWFloppyM35FD {
+    pub state: u16,
+    pub error: u16,
+    pub interrupt_message: u16,
+    pub sectors: Vec<HWFloppyM35FDSector>,
+}
+
+const ERROR_NONE: u16       = 0x0000;
+const ERROR_BUSY: u16       = 0x0001;
+const ERROR_NO_MEDIA: u16   = 0x0002;
+const ERROR_PROTECTED: u16  = 0x0003;
+const ERROR_EJECT: u16      = 0x0004;
+const ERROR_BAD_SECTOR: u16 = 0x0005;
+const ERROR_BROKEN: u16     = 0xffff;
+
+const STATE_NO_MEDIA: u16   = 0x0000;
+const STATE_READY: u16      = 0x0001;
+const STATE_READY_WP: u16   = 0x0002;
+const STATE_BUSY: u16       = 0x0003;
+
+impl HWFloppyM35FD {
+    pub fn new() -> HWFloppyM35FD {
+        HWFloppyM35FD {
+            state: 0,
+            error: 0,
+            interrupt_message: 0,
+            //mem: Box::new([0; FLOPPY_MEMORY_SIZE]),
+            sectors: Vec::new(),
+        }
+    }
+}
+
+impl Hardware for HWFloppyM35FD {
+    fn info_hardware_id_upper(&self) -> u16 { 0x4fd5 }
+    fn info_hardware_id_lower(&self) -> u16 { 0x24c5 }
+    fn info_manufacturer_id_upper(&self) -> u16 { 0x1eb3 }
+    fn info_manufacturer_id_lower(&self) -> u16 { 0x7e91 }
+    fn info_version(&self) -> u16 { 0x000b }
+
+    /*
+    fn set_error(&mut self, cpu: &mut DCPU, err: u16) -> () {
+        if err != self.error {
+            println!("Trigger DCPU interrupt!");
+        }
+    }
+    */
+
+    fn process_interrupt(&mut self, cpu: &mut DCPU) -> () {
+        let a = cpu.reg[REG_A];
+        let (old_error, old_state) = (self.error, self.state);
+
+        match a {
+            0 => { /* Poll device */
+                cpu.reg[REG_B] = self.state as u16;
+                cpu.reg[REG_C] = self.error as u16;
+                println!("Polling");
+            },
+            1 => { /* Set interrupt */
+                let x = cpu.reg[REG_X] as usize;
+                self.interrupt_message = x as u16;
+            },
+            2 => { /* Read sector */
+                let x = cpu.reg[REG_X] as usize;
+                let y = cpu.reg[REG_Y] as usize;
+
+                match self.state {
+                    STATE_NO_MEDIA => {
+                        self.error = ERROR_NO_MEDIA;
+                    },
+                    STATE_READY | STATE_READY_WP => {
+                        if x < 1440 {
+                            // TODO: Synchronous reading, for now
+                            match self.sectors.get(x) {
+                                Some(s) => {
+                                    for i in 0..512 {
+                                        cpu.mem[(y + i) % MEMORY_SIZE] = s.mem[i];
+                                    }
+                                },
+                                None => {
+                                    for i in 0..512 {
+                                        cpu.mem[(y + i) % MEMORY_SIZE] = 0;
+                                    }
+                                },
+                            }
+                            self.error = ERROR_NONE;
+                        } else {
+                            self.error = ERROR_BAD_SECTOR;
+                        }
+
+                    },
+                    _ => {
+                        self.error = ERROR_BROKEN;
+                    }
+                }
+            },
+            _ => {}
+        }
+
+        if self.state != old_state || self.error != old_error {
+            if self.interrupt_message > 0 {
+                println!("Trigger interrupt! {}", self.interrupt_message);
+            }
+        }
+    }
+}
+
+*/
+
 
 pub struct DCPU {
     pub terminate: bool,
