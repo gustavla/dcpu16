@@ -519,10 +519,10 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
     Ok(tokens)
 }
 
-fn process_value(value: u16) -> Result<ParsingInfo, ParsingError> {
-    let info = if value == 0xffff {
+fn process_value(value: u16, allow_inline: bool) -> Result<ParsingInfo, ParsingError> {
+    let info = if value == 0xffff && allow_inline {
         ParsingInfo { operand: 0x20u16, extra_byte: None, unassigned: false }
-    } else if value <= 0x1e {
+    } else if value <= 0x1e && allow_inline {
         ParsingInfo { operand: (value + 0x21) as u16, extra_byte: None, unassigned: false }
     } else {
         ParsingInfo { operand: 0x1f, extra_byte: Some(value), unassigned: false }
@@ -547,13 +547,14 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
             }
             */
             *cur += 1;
-            Ok(try!(process_value(value)))
+            // L-values are not allowed to have inlined values
+            Ok(try!(process_value(value, !lvalue)))
         },
         TokenType::Label(id) => {
             match cpu.labels.get(&id) {
                 Some(label) => {
                     *cur += 1;
-                    Ok(try!(process_value(*label)))
+                    Ok(try!(process_value(*label, !lvalue)))
                 },
                 None => {
                     *cur += 1;

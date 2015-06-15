@@ -10,7 +10,7 @@ fn test_case(ll: &[&str], mem: &[u16]) {
     let mut i = 0;
     for m in mem {
         //assert_eq!(cpu.mem[i], *m);
-        assert!(cpu.mem[i] == *m, "line {}: {:x} != {:x}", i, cpu.mem[i], *m);
+        assert!(cpu.mem[i] == *m, "line {}: {:04x} != {:04x} ({:?})", i, cpu.mem[i], *m, ll);
         i += 1;
     }
     // TODO: Make sure the rest of the memory is empty
@@ -71,12 +71,12 @@ fn test_assembler_shift_ops() {
 fn test_assembler_control_flow() {
     test_case(&["IFB A, B"], &[0x0410]);
     test_case(&["IFC A, B"], &[0x0411]);
-    test_case(&["IFE A, B"], &[0x0412]);
-    test_case(&["IFN A, B"], &[0x0413]);
-    test_case(&["IFG A, B"], &[0x0414]);
+    test_case(&["IFE 1, B"], &[0x07f2, 1]);
+    test_case(&["IFN B, 1"], &[0x8833]);
+    test_case(&["IFG 30, B"], &[0x07f4, 30]);
     test_case(&["IFA A, B"], &[0x0415]);
     test_case(&["IFL A, B"], &[0x0416]);
-    test_case(&["IFU A, B"], &[0x0417]);
+    test_case(&["IFU 0x1000, 0x050"], &[0x7ff7, 0x0050, 0x1000]);
 }
 
 #[test]
@@ -102,6 +102,7 @@ fn test_assembler_hardware_ops() {
     test_case(&["HWN A"], &[0x0200]);
     test_case(&["HWQ A"], &[0x0220]);
     test_case(&["HWI A"], &[0x0240]);
+    test_case(&["HWI 1"], &[0x8a40]);
 }
 
 #[test]
