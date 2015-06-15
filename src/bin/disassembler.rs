@@ -40,7 +40,7 @@ fn main() {
         Ok(f) => f,
     };
 
-    let mut i = 0usize;
+    let mut nwords = 0usize;
     let mut buffer: Vec<u8> = Vec::new();
     let res = file.read_to_end(&mut buffer);
     match res {
@@ -51,8 +51,8 @@ fn main() {
                 if j % 2 == 0 {
                     sig = v as u16;
                 } else {
-                    cpu.mem[i] = (sig << 8) + (v as u16);
-                    i += 1;
+                    cpu.mem[nwords] = (sig << 8) + (v as u16);
+                    nwords += 1;
                 }
 
                 j += 1;
@@ -65,11 +65,11 @@ fn main() {
     }
 
     loop {
-        let (offset, s) = disassembler::disassemble_instruction(&cpu, color);
-        cpu.pc += offset;
-        if cpu.pc as usize > i {
+        if cpu.pc as usize > nwords {
             break;
         }
+        let (offset, s) = disassembler::disassemble_instruction(&cpu, color);
+        cpu.pc += offset;
         println!("{}", s);
     }
 }
