@@ -7,6 +7,7 @@ use std::env;
 use dcpu16::dcpu;
 use dcpu16::disassembler;
 use getopts::Options;
+use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
@@ -17,7 +18,7 @@ fn main() {
         Ok(m) => { m },
         Err(why) => {
             println!("{}", why);
-            return;
+            exit(1);
         },
     };
 
@@ -35,7 +36,7 @@ fn main() {
         Ok(()) => {},
         Err(why) => {
             println!("Could load file {}: {}", path.display(), why);
-            return;
+            exit(1);
         },
     }
 

@@ -8,6 +8,7 @@ use std::path::Path;
 use std::env;
 use getopts::Options;
 use dcpu16::assembler;
+use std::process::exit;
 
 fn main() {
     let opts = Options::new();
@@ -16,13 +17,13 @@ fn main() {
         Ok(m) => { m },
         Err(why) => {
             println!("{}", why);
-            return;
+            exit(1);
         },
     };
 
     if matches.free.len() != 1 {
         println!("Please input file");
-        return;
+        exit(1);
     }
     let ref filename = matches.free[0];
     let mut lines: Vec<String> = Vec::new();
@@ -32,7 +33,7 @@ fn main() {
     let file = match File::open(&path) {
         Err(why) => {
             println!("Could load file {}: {}", path.display(), why);
-            return;
+            exit(1);
         },
         Ok(file) => file,
     };

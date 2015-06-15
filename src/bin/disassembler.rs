@@ -9,6 +9,7 @@ use std::path::Path;
 use getopts::Options;
 use dcpu16::dcpu;
 use dcpu16::disassembler;
+use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
@@ -18,7 +19,7 @@ fn main() {
         Ok(m) => { m },
         Err(why) => {
             println!("{}", why);
-            return;
+            exit(1);
         },
     };
 
@@ -35,7 +36,7 @@ fn main() {
     let mut file = match File::open(&path) {
         Err(why) => {
             println!("Could not open file {}: {}", path.display(), why.description());
-            return;
+            exit(1);
         },
         Ok(f) => f,
     };
@@ -60,7 +61,7 @@ fn main() {
         }
         Err(why) => {
             println!("Could not read contents of file: {}", why);
-            return;
+            exit(1);
         },
     }
 

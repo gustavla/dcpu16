@@ -9,6 +9,7 @@ use std::path::Path;
 use std::env;
 use getopts::Options;
 use dcpu16::assembler;
+use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
@@ -24,7 +25,7 @@ fn main() {
 
     if matches.free.len() != 1 {
         println!("Please input file");
-        return;
+        exit(1);
     }
     let output_filename = match matches.opt_str("output") {
         Some(s) => s,
@@ -39,7 +40,7 @@ fn main() {
     let file = match File::open(&path) {
         Err(why) => {
             println!("Could not open file {}: {}", path.display(), why.description());
-            return;
+            exit(1);
         },
         Ok(file) => file,
     };
@@ -60,7 +61,7 @@ fn main() {
             let file = match File::create(&Path::new(&output_filename)) {
                 Err(why) => {
                     println!("Could not open file {}: {}", path.display(), why.description());
-                    return;
+                    exit(1);
                 },
                 Ok(f) => f,
             };
@@ -86,6 +87,7 @@ fn main() {
         },
         Err(err) => {
             assembler::print_parse_error(&cpu, &lines[err.line as usize][..], err);
+            exit(1);
         },
     }
 
