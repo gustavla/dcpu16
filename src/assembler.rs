@@ -1023,17 +1023,6 @@ pub fn parse(lines: &Vec<String>, cpu: &mut PCPU) -> Result<(), ParsingError> {
         }
 
         let tokens = try!(tokenize(line_no, l, cpu));
-
-        /*
-        if tokens.len() > 0 {
-            println!("[");
-            for t in tokens.iter() {
-                println!("tokens = {} / {}({})", t.ttype, t.col, t.len);
-            }
-            println!("]");
-        }
-        */
-
         let mut cur = 0;
         try!(parse_line(line_no, &tokens, cpu, &mut cur));
 
