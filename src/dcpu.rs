@@ -1,5 +1,10 @@
 #![allow(dead_code)]
 
+use std::path::Path;
+use std::fs::File;
+use std::io::Read;
+use std::io::Result;
+
 use instructions::*;
 
 pub const MEMORY_SIZE: usize = 65536;
@@ -449,6 +454,26 @@ impl DCPU {
             }
             _ => {},
         }
+    }
+
+    pub fn load_from_assembly_file(&mut self, path: &Path) -> Result<()> {
+        let mut file = try!(File::open(&path));
+        let mut i = 0;
+        let mut buffer: Vec<u8> = Vec::new();
+        let res = try!(file.read_to_end(&mut buffer));
+        let mut j = 0;
+        let mut sig = 0u16;
+        for v in buffer {
+            if j % 2 == 0 {
+                sig = v as u16;
+            } else {
+                self.mem[i] = (sig << 8) + (v as u16);
+                i += 1;
+            }
+
+            j += 1;
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]
