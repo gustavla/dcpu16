@@ -65,7 +65,7 @@ fn main() {
     }
 
     loop {
-        if cpu.pc as usize > nwords {
+        if cpu.pc as usize >= nwords {
             break;
         }
         let (offset, s) = disassembler::disassemble_instruction(&cpu, color);
