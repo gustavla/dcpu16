@@ -14,7 +14,10 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
-        Err(f) => { panic!(f.to_string()) },
+        Err(why) => {
+            println!("{}", why);
+            return;
+        },
     };
 
     if matches.free.len() != 1 {
@@ -27,7 +30,10 @@ fn main() {
     let x: &[_] = &[' ', '\n', '\t'];
     let path = Path::new(filename);
     let file = match File::open(&path) {
-        Err(_) => panic!(""),//Could not open file {}: {}", path.display(), Exception::description(&why)),
+        Err(why) => {
+            println!("Could load file {}: {}", path.display(), why);
+            return;
+        },
         Ok(file) => file,
     };
     for line in BufReader::new(&file).lines() {
