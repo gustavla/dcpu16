@@ -6,11 +6,12 @@ fn test_case(ll: &[&str], mem: &[u16]) {
         lines.push(l.to_string());
     }
     let mut cpu = PCPU::new();
-    assert!(parse(&lines, &mut cpu).is_ok());
+    assert!(parse(&lines, &mut cpu).is_ok(), "({:?} / {:?})", ll, mem);
     let mut i = 0;
     for m in mem {
         //assert_eq!(cpu.mem[i], *m);
-        assert!(cpu.mem[i] == *m, "line {}: {:04x} != {:04x} ({:?})", i, cpu.mem[i], *m, ll);
+        assert!(cpu.mem[i] == *m, "word addr {}: 0x{:04x} != 0x{:04x} ({:?} / {:?})",
+                                  i, cpu.mem[i], *m, ll, mem);
         i += 1;
     }
     // TODO: Make sure the rest of the memory is empty
@@ -129,28 +130,54 @@ fn test_assembler_pick() {
     test_case(&["SET A, PICK 0x1234"], &[0x6801, 0x1234]);
     test_case(&["SET PICK 0xffff, A"], &[0x0341, 0xffff]);
     test_case(&["SET PICK 0xffff, [0x1000]"], &[0x7b41, 0x1000, 0xffff]);
-    test_case(&["AIS PICK 1000"], &[0x6940, 0x03e8]);
+    test_case(&["IAS PICK 1000"], &[0x6940, 0x03e8]);
 }
 
 #[test]
-fn test_assembler_literal_addition() {
+fn test_assembler_registry_literal_addition() {
     test_case(&["SET A, [I + 0x1000]"], &[0x5801, 0x1000]);
     test_case(&["SET A, [0x1000 + I]"], &[0x5801, 0x1000]);
     test_case(&["SET A, [J+1]"], &[0x5c01, 0x0001]);
 }
 
 #[test]
-fn test_assembler_label_addition() {
-    test_case(&["DAT 1",
-                ":label",
-                "DAT 2",
-                "SET A, [label + I]"],
-              &[1, 2, 0x5801, 0x0001, 0x0004, 0x8421]);
+fn test_assembler_label_registry_addition() {
     test_case(&["DAT 1",
                 ":label",
                 "DAT 2",
                 "SET A, [I + label]"],
-              &[1, 2, 0x5801, 0x0001, 0x0004, 0x8421]);
+              &[1, 2, 0x5801, 0x0001]);
+    test_case(&["DAT 1",
+                ":label",
+                "DAT 2",
+                "SET A, [label + I]"],
+              &[1, 2, 0x5801, 0x0001]);
+    test_case(&["DAT 1",
+                ":label",
+                "DAT 2, 3",
+                ":label2",
+                "DAT 4",
+                "SET [label + A], [label2 + J]"],
+              &[1, 2, 3, 4, 0x5e01, 0x0003, 0x0001]);
+}
+
+#[test]
+fn test_assembler_label_literal_addition() {
+    test_case(&["DAT 1",
+                ":label",
+                "DAT 2",
+                "SET A, [label + 4]"],
+              &[1, 2, 0x7801, 0x0005]);
+    test_case(&["DAT 1",
+                ":label",
+                "DAT 2",
+                "SET A, [2 + label]"],
+              &[1, 2, 0x7801, 0x0003]);
+    test_case(&["DAT 1",
+                ":label",
+                "DAT 2, 3, 4",
+                "SET [label + 1], [label + 2]"],
+              &[1, 2, 3, 4, 0x7bc1, 0x0003, 0x0002]);
 }
 
 #[test]
@@ -168,7 +195,7 @@ fn test_assembler_case_correctness_instructions() {
 }
 
 #[test]
-#[should_panic(expected = "assertion failed")]
+#[should_panic]
 fn test_assembler_case_correctness_labels() {
     // Labels are case sensitive
     test_case(&[":label SET A, LABEL"], &[0x8401]);
@@ -223,7 +250,7 @@ fn test_assembler_future_labels() {
 
 // TODO: Expect parse error
 #[test]
-#[should_panic(expected = "assertion failed")]
+#[should_panic]
 fn test_assembler_unknown_label() {
     test_case(&["SET A, label"], &[0]);
 }

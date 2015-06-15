@@ -138,9 +138,11 @@ fn value_str(cpu: &DCPU, value: usize, offset: &mut u16,
             maybe_colorize("PEEK".to_string(), COLOR_NAMED, use_color)
         },
         0x1a => {
+            let v = cpu.mem[(cpu.pc + *offset) as usize];
             *offset += 1;
-            // TODO n needs to be the actual value
-            maybe_colorize("PICK n".to_string(), COLOR_NAMED, use_color)
+            let ss = maybe_colorize("PICK".to_string(), COLOR_NAMED, use_color);
+            let vv = maybe_colorize(format!("{}", v), COLOR_NUM_LITERAL, use_color);
+            format!("{} {}", ss, vv)
         },
         0x1b => {
             maybe_colorize("SP".to_string(), COLOR_NAMED, use_color)

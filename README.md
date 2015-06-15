@@ -13,11 +13,10 @@ To run DCPU-16 programs with hardware devices (such as a monitor), see:
 
 ## Completed features
 
-* Assembler
+* Assembler (feature complete)
   * Labels
   * String literals
-  * Good error messages
-  * PUSH, POP and PEEK
+  * Readable error messages
 * Disassembler (feature complete)
   * Separate tokenizer
   * Colorized output
@@ -29,9 +28,6 @@ To run DCPU-16 programs with hardware devices (such as a monitor), see:
 
 ## Planned
 
-* Assembler
-  * PICK
-  * Label and numeric literal addition (e.g. `[label + 10]`)
 * Emulator
   * ADX, SBX, STI, STD
   * INT, IAG, IAS, RFI, IAQ

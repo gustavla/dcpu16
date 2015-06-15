@@ -7,6 +7,12 @@ use std::collections::HashMap;
 use dcpu::MEMORY_SIZE;
 use instructions::*;
 
+struct UnassignedLabel {
+    addr: u16,
+    label: u16,
+    offset: u16,
+}
+
 // PCPU contains the parsing state of a DCPU
 pub struct PCPU {
     // Memory
@@ -28,7 +34,7 @@ pub struct PCPU {
     id_to_label: HashMap<u16, String>,
 
     // Addresses with unseen label
-    unassigned_addresses: Vec<u16>,
+    unassigned_addresses: Vec<UnassignedLabel>,
 
     // Next label token
     next_label_id: u16,
@@ -164,11 +170,20 @@ struct ParsingInfo {
     operand: u16,
     extra_byte: Option<u16>,
     unassigned: bool,
+    offset: u16,
 }
 
 impl ParsingInfo {
     fn new() -> ParsingInfo {
-        ParsingInfo { operand: 0u16, extra_byte: None, unassigned: false }
+        ParsingInfo { operand: 0, extra_byte: None, unassigned: false, offset: 0 }
+    }
+
+    fn new_single(operand: u16) -> ParsingInfo {
+        ParsingInfo{operand: operand, extra_byte: None, unassigned: false, offset: 0}
+    }
+
+    fn new_extra(operand: u16, extra: u16) -> ParsingInfo {
+        ParsingInfo{operand: operand, extra_byte: Some(extra), unassigned: false, offset: 0}
     }
 }
 
@@ -181,6 +196,7 @@ pub enum TokenType {
     DataOpcode,
     Label(u16),
     Registry(u16),
+    Pick,
     Peek,
     Push,
     Pop,
@@ -210,6 +226,7 @@ impl fmt::Display for TokenType {
             &TokenType::DataOpcode => write!(f, "DataOpcode"),
             &TokenType::Label(i) => write!(f, "Label({})", i),
             &TokenType::Registry(i) => write!(f, "Registry({})", i),
+            &TokenType::Pick => write!(f, "Pick"),
             &TokenType::Peek => write!(f, "Peek"),
             &TokenType::Push => write!(f, "Push"),
             &TokenType::Pop => write!(f, "Pop"),
@@ -248,6 +265,7 @@ fn registry_char(c: char) -> isize {
 
 fn keyword_token(s: &str) -> Option<TokenType> {
     match &s.to_ascii_uppercase()[..] {
+        "PICK" => Some(TokenType::Pick),
         "PEEK" => Some(TokenType::Peek),
         "PUSH" => Some(TokenType::Push),
         "POP" => Some(TokenType::Pop),
@@ -374,14 +392,17 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                 // Parse literal (dec/hex)
                 //let mut s: String = String::new();
                 let col = i;
+                let mut end_col = i;
                 let minus = line.chars().nth(i).unwrap() == '-';
                 if minus {
                     i += 1;
+                    end_col += 1;
                 }
 
                 let res: Option<isize> = if i + 1 < line.len() &&
                                             line.chars().nth(i).unwrap() == '0' &&
-                                            (line.chars().nth(i+1).unwrap() == 'X' || line.chars().nth(i+1).unwrap() == 'x') {
+                                            (line.chars().nth(i+1).unwrap() == 'X' ||
+                                             line.chars().nth(i+1).unwrap() == 'x') {
                     i += 2;
                     // Hexadecimal
                     let mut s: String = String::new();
@@ -390,6 +411,7 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                         if legal_label_char(c) {
                             s.push(c);
                             i += 1;
+                            end_col += 1;
                         } else {
                             i -= 1;
                             break;
@@ -408,6 +430,7 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                         if legal_label_char(c) {
                             s.push(c);
                             i += 1;
+                            end_col += 1;
                         } else {
                             i -= 1;
                             break;
@@ -421,15 +444,14 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                 };
                 match res {
                     Some(value) => {
-                        Token { ttype: TokenType::NumericLiteral((if minus { -value } else { value }) as
-                                                          u16),
+                        Token { ttype: TokenType::NumericLiteral((if minus { -value } else { value }) as u16),
                                 col: col,
-                                len: i+1-col }
+                                len: end_col-col }
                     },
                     None => {
                         let err = ParsingError{ line: line_no,
                                                 col: col,
-                                                len: i+1-col,
+                                                len: i-col,
                                                 global: false,
                                                 etype: ParsingErrorType::InvalidLiteral };
                         return Err(err);
@@ -464,8 +486,8 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                     Token { ttype: TokenType::Registry(registry_char(s.chars().nth(0).unwrap()) as u16),
                             col: col,
                             len: 1 }
-                } else if keyword_token(&s[..]).is_some() {
-                    Token { ttype: keyword_token(&s[..]).unwrap(),
+                } else if let Some(ttype) = keyword_token(&s[..]) {
+                    Token { ttype: ttype,
                             col: col,
                             len: s.len() }
                 } else if s.len() == 3 && basic_opcode(&s[..]).is_some() {
@@ -521,11 +543,11 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
 
 fn process_value(value: u16, allow_inline: bool) -> Result<ParsingInfo, ParsingError> {
     let info = if value == 0xffff && allow_inline {
-        ParsingInfo { operand: 0x20u16, extra_byte: None, unassigned: false }
+        ParsingInfo::new_single(0x20)
     } else if value <= 0x1e && allow_inline {
-        ParsingInfo { operand: (value + 0x21) as u16, extra_byte: None, unassigned: false }
+        ParsingInfo::new_single(value + 0x21)
     } else {
-        ParsingInfo { operand: 0x1f, extra_byte: Some(value), unassigned: false }
+        ParsingInfo::new_extra(0x1f, value)
     };
     Ok(info)
 }
@@ -558,18 +580,37 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                 },
                 None => {
                     *cur += 1;
-                    Ok(ParsingInfo { operand: 0x1f, extra_byte: Some(id), unassigned: true })
+                    Ok(ParsingInfo{operand: 0x1f, extra_byte: Some(id), unassigned: true, offset: 0})
                 },
             }
         }
         TokenType::Registry(reg) => {
             *cur += 1;
-            let info = ParsingInfo { operand: reg as u16, extra_byte: None, unassigned: false };
+            let info = ParsingInfo::new_single(reg as u16);
             Ok(info)
+        },
+        TokenType::Pick => {
+            *cur += 1;
+            let ttype0 = try!(get_token_type(line_no, tokens, *cur));
+            match *ttype0 {
+                TokenType::NumericLiteral(v) => {
+                    *cur += 1;
+                    let info = ParsingInfo::new_extra(0x1a, v);
+                    Ok(info)
+                }
+                _ => {
+                    let err = ParsingError{ line: line_no,
+                                            col: tokens[*cur].col,
+                                            len: tokens[*cur].len,
+                                            global: false,
+                                            etype: ParsingErrorType::ExpectingLiteral};
+                    Err(err)
+                }
+            }
         },
         TokenType::Peek => {
             *cur += 1;
-            let info = ParsingInfo { operand: 0x19, extra_byte: None, unassigned: false };
+            let info = ParsingInfo::new_single(0x19);
             Ok(info)
         },
         TokenType::Push => {
@@ -582,7 +623,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                 Err(err)
             } else {
                 *cur += 1;
-                let info = ParsingInfo { operand: 0x18, extra_byte: None, unassigned: false };
+                let info = ParsingInfo::new_single(0x18);
                 Ok(info)
             }
         },
@@ -596,23 +637,23 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                 Err(err)
             } else {
                 *cur += 1;
-                let info = ParsingInfo { operand: 0x18, extra_byte: None, unassigned: false };
+                let info = ParsingInfo::new_single(0x18);
                 Ok(info)
             }
         },
         TokenType::SP => {
             *cur += 1;
-            let info = ParsingInfo { operand: 0x1b, extra_byte: None, unassigned: false };
+            let info = ParsingInfo::new_single(0x1b);
             Ok(info)
         },
         TokenType::PC => {
             *cur += 1;
-            let info = ParsingInfo { operand: 0x1c, extra_byte: None, unassigned: false };
+            let info = ParsingInfo::new_single(0x1c);
             Ok(info)
         },
         TokenType::EX => {
             *cur += 1;
-            let info = ParsingInfo { operand: 0x1d, extra_byte: None, unassigned: false };
+            let info = ParsingInfo::new_single(0x1d);
             Ok(info)
         },
         /**
@@ -630,7 +671,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
-                            let info = ParsingInfo { operand: 0x08+reg, extra_byte: None, unassigned: false };
+                            let info = ParsingInfo::new_single(0x08+reg);
                             Ok(info)
                         },
                         TokenType::Addition => {
@@ -643,7 +684,34 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
-                                            let info = ParsingInfo { operand: 0x10+reg, extra_byte: Some(offset), unassigned: false };
+                                            let info = ParsingInfo::new_extra(0x10 + reg, offset);
+                                            Ok(info)
+                                        },
+                                        _ => {
+                                            let err = ParsingError{ line: line_no,
+                                                                    col: tokens[*cur].col,
+                                                                    len: tokens[*cur].len,
+                                                                    global: false,
+                                                                    etype: ParsingErrorType::ExpectingRightBracket };
+                                            Err(err)
+                                        }
+                                    }
+                                },
+                                TokenType::Label(id) => {
+                                    *cur += 1;
+                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    match *ttype1 {
+                                        TokenType::RightBracket => {
+                                            *cur += 1;
+                                            let info = match cpu.labels.get(&id) {
+                                                Some(label) => {
+                                                    let pos = *label;
+                                                    ParsingInfo::new_extra(0x10 + reg, pos)
+                                                },
+                                                None => {
+                                                    ParsingInfo{operand: 0x10 + reg, extra_byte: Some(id), unassigned: true, offset: 0}
+                                                }
+                                            };
                                             Ok(info)
                                         },
                                         _ => {
@@ -682,7 +750,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
-                            let info = ParsingInfo { operand: 0x1e, extra_byte: Some(v0), unassigned: false };
+                            let info = ParsingInfo::new_extra(0x1e, v0);
                             Ok(info)
                         },
                         TokenType::Addition => {
@@ -695,7 +763,34 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
-                                            let info = ParsingInfo { operand: 0x10+reg, extra_byte: Some(v0), unassigned: false };
+                                            let info = ParsingInfo::new_extra(0x10 + reg, v0);
+                                            Ok(info)
+                                        },
+                                        _ => {
+                                            let err = ParsingError{ line: line_no,
+                                                                    col: tokens[*cur].col,
+                                                                    len: tokens[*cur].len,
+                                                                    global: false,
+                                                                    etype: ParsingErrorType::ExpectingRightBracket };
+                                            Err(err)
+                                        }
+                                    }
+                                },
+                                TokenType::Label(id) => {
+                                    *cur += 1;
+                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    match *ttype1 {
+                                        TokenType::RightBracket => {
+                                            *cur += 1;
+                                            let info = match cpu.labels.get(&id) {
+                                                Some(label) => {
+                                                    let pos = (((*label as usize) + (v0 as usize)) % MEMORY_SIZE) as u16;
+                                                    ParsingInfo::new_extra(0x1e, pos)
+                                                },
+                                                None => {
+                                                    ParsingInfo{operand: 0x1e, extra_byte: Some(id), unassigned: true, offset: v0}
+                                                }
+                                            };
                                             Ok(info)
                                         },
                                         _ => {
@@ -734,15 +829,82 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
-                            match cpu.labels.get(&id) {
+                            let info = match cpu.labels.get(&id) {
                                 Some(label) => {
-                                    let info = ParsingInfo { operand: 0x1e, extra_byte: Some(*label), unassigned: false };
-                                    Ok(info)
+                                    ParsingInfo::new_extra(0x1e, *label)
                                 },
                                 None => {
-                                    let info = ParsingInfo { operand: 0x1e, extra_byte: Some(id), unassigned: true };
-                                    Ok(info)
+                                    ParsingInfo{operand: 0x1e, extra_byte: Some(id), unassigned: true, offset: 0}
                                 },
+                            };
+                            Ok(info)
+                        },
+                        TokenType::Addition => {
+                            *cur += 1;
+                            let ttype2 = try!(get_token_type(line_no, tokens, *cur));
+                            match *ttype2 {
+                                TokenType::NumericLiteral(offset) => {
+                                    *cur += 1;
+                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    match *ttype1 {
+                                        TokenType::RightBracket => {
+                                            *cur += 1;
+
+                                            let info = match cpu.labels.get(&id) {
+                                                Some(label) => {
+                                                    let pos = (((*label as usize) + (offset as usize)) % MEMORY_SIZE) as u16;
+                                                    ParsingInfo::new_extra(0x1e, pos)
+                                                },
+                                                None => {
+                                                    ParsingInfo{operand: 0x1e, extra_byte: Some(id), unassigned: true, offset: offset}
+                                                }
+                                            };
+                                            Ok(info)
+                                        },
+                                        _ => {
+                                            let err = ParsingError{ line: line_no,
+                                                                    col: tokens[*cur].col,
+                                                                    len: tokens[*cur].len,
+                                                                    global: false,
+                                                                    etype: ParsingErrorType::ExpectingRightBracket };
+                                            Err(err)
+                                        }
+                                    }
+                                },
+                                TokenType::Registry(reg) => {
+                                    *cur += 1;
+                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    match *ttype1 {
+                                        TokenType::RightBracket => {
+                                            *cur += 1;
+                                            let info = match cpu.labels.get(&id) {
+                                                Some(label) => {
+                                                    ParsingInfo::new_extra(0x10 + reg, *label)
+                                                },
+                                                None => {
+                                                    ParsingInfo{operand: 0x10 + reg, extra_byte: Some(id), unassigned: true, offset: 0}
+                                                },
+                                            };
+                                            Ok(info)
+                                        },
+                                        _ => {
+                                            let err = ParsingError{ line: line_no,
+                                                                    col: tokens[*cur].col,
+                                                                    len: tokens[*cur].len,
+                                                                    global: false,
+                                                                    etype: ParsingErrorType::ExpectingRightBracket };
+                                            Err(err)
+                                        }
+                                    }
+                                },
+                                _ => {
+                                    let err = ParsingError{ line: line_no,
+                                                            col: tokens[*cur].col,
+                                                            len: tokens[*cur].len,
+                                                            global: false,
+                                                            etype: ParsingErrorType::ExpectingLiteral };
+                                    Err(err)
+                                }
                             }
                         },
                         _ => {
@@ -769,7 +931,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                      col: tokens[*cur].col,
                                      len: tokens[*cur].len,
                                      global: false,
-                                     etype: ParsingErrorType::ExpectingOperand };
+                                     etype: ParsingErrorType::ExpectingOperand};
             Err(err)
         },
     }
@@ -814,6 +976,7 @@ fn check_end_of_line(line_no: usize, tokens: &Vec<Token>,
     if tokens.len() <= *cur {
         Ok(())
     } else {
+        println!("{} {} {}", tokens[tokens.len() - 1].col, tokens[*cur].col, tokens[tokens.len()-1].len);
         let err = ParsingError { line: line_no,
                                  col: tokens[*cur].col,
                                  len: tokens[tokens.len()-1].col - tokens[*cur].col + tokens[tokens.len()-1].len,
@@ -848,7 +1011,8 @@ fn parse_basic_opcode(line_no: usize,
                 Some(byte) => {
                     cpu.mem[cpu.pc as usize] = byte;
                     if a.unassigned {
-                        cpu.unassigned_addresses.push(cpu.pc);
+                        let ul = UnassignedLabel{addr: cpu.pc, label: byte, offset: a.offset};
+                        cpu.unassigned_addresses.push(ul);
                     }
 
                     cpu.pc += 1;
@@ -860,7 +1024,8 @@ fn parse_basic_opcode(line_no: usize,
                 Some(byte) => {
                     cpu.mem[cpu.pc as usize] = byte;
                     if b.unassigned {
-                        cpu.unassigned_addresses.push(cpu.pc);
+                        let ul = UnassignedLabel{addr: cpu.pc, label: byte, offset: b.offset};
+                        cpu.unassigned_addresses.push(ul);
                     }
                     cpu.pc += 1;
                 },
@@ -898,7 +1063,8 @@ fn parse_special_opcode(line_no: usize,
                 Some(byte) => {
                     cpu.mem[cpu.pc as usize] = byte;
                     if a.unassigned {
-                        cpu.unassigned_addresses.push(cpu.pc);
+                        let ul = UnassignedLabel{addr: cpu.pc, label: byte, offset: a.offset};
+                        cpu.unassigned_addresses.push(ul);
                     }
                     cpu.pc += 1;
                 },
@@ -1030,16 +1196,17 @@ pub fn parse(lines: &Vec<String>, cpu: &mut PCPU) -> Result<(), ParsingError> {
         line_no += 1;
     }
 
-    for addr in cpu.unassigned_addresses.iter() {
+    for ul in cpu.unassigned_addresses.iter() {
         // Note, the label ID was stored temporarily in the memory
         // address.
-        let label_id = cpu.mem[*addr as usize];
-        match cpu.labels.get(&label_id) {
+        //let label_id = cpu.mem[ul.addr as usize];
+        match cpu.labels.get(&ul.label) {
             Some(v) => {
-                cpu.mem[*addr as usize] = *v;
+                println!("here: {} {} {}", ul.addr, ul.label, ul.offset);
+                cpu.mem[ul.addr as usize] = ul.offset + *v;
             },
             None => {
-                let err = match cpu.label_first_line_error.get(&label_id) {
+                let err = match cpu.label_first_line_error.get(&ul.label) {
                     Some(s) => *s,
                     None => panic!("Unknown error"),
                 };
@@ -1069,4 +1236,3 @@ pub fn print_parse_error(cpu: &PCPU, line: &str, err: ParsingError) {
         println!("\x1b[0m");
     }
 }
-
