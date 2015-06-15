@@ -1202,7 +1202,6 @@ pub fn parse(lines: &Vec<String>, cpu: &mut PCPU) -> Result<(), ParsingError> {
         //let label_id = cpu.mem[ul.addr as usize];
         match cpu.labels.get(&ul.label) {
             Some(v) => {
-                println!("here: {} {} {}", ul.addr, ul.label, ul.offset);
                 cpu.mem[ul.addr as usize] = ul.offset + *v;
             },
             None => {
