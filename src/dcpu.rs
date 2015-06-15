@@ -31,6 +31,9 @@ pub trait Hardware {
     fn get_data(&self, cpu: &DCPU) -> Vec<u8>;
 }
 
+// Some example Hardware implementations
+// TODO: Possibly remove altogether from base repo
+/*
 pub struct HWMonitorLEM1802 {
     pub connected: bool,
     pub ram_location: u16,
@@ -64,7 +67,6 @@ impl Hardware for HWMonitorLEM1802 {
     }
 }
 
-/*
 const FLOPPY_MEMORY_SIZE: usize = 737280;
 const FLOPPY_SECTOR_SIZE: usize = 512;
 
