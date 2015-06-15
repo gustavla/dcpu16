@@ -21,6 +21,7 @@ More info about the DCPU-16:
   * Basic instructions
   * Conditionals
   * Jumps
+  * Some hardware support
 
 ## Planned
 
@@ -30,8 +31,7 @@ More info about the DCPU-16:
 * Emulator
   * ADX, SBX, STI, STD
   * INT, IAG, IAS, RFI, IAQ
-  * HWN, HWQ, HWI
-  * Support for hardware
+  * Better support for hardware
 
 ## Binaries
 
@@ -62,7 +62,7 @@ Since hardware is not supported, you can use `OUT` to print to regular standard 
 
 ## Example
 
-Save the following as `prog.asm`:
+Save the following as `prog.dasm16`:
 
                 OUT hello                   ; Print the string defined at 'hello'
                 DAT 0                       ; This will terminate the program    
@@ -71,7 +71,7 @@ Save the following as `prog.asm`:
     
 Assemble the program:
 
-    $ assembler prog.asm -o prog.bin
+    $ assembler prog.dasm16 -o prog.bin
     
 Run it:
 
