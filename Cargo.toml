@@ -18,22 +18,22 @@ test = false
 doctest = false
 
 [[bin]]
-name = "emulator"
+name = "dcpu16"
 path = "src/bin/emulator.rs"
 test = false
 
 [[bin]]
-name = "assembler"
+name = "dcpu16-assembler"
 path = "src/bin/assembler.rs"
 test = false
 
 [[bin]]
-name = "disassembler"
+name = "dcpu16-disassembler"
 path = "src/bin/disassembler.rs"
 test = false
 
 [[bin]]
-name = "tokenizer"
+name = "dcpu16-tokenizer"
 path = "src/bin/tokenizer.rs"
 test = false
 

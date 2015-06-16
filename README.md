@@ -35,14 +35,16 @@ To run DCPU-16 programs with hardware devices (such as a monitor), see:
 
 ## Binaries
 
+Run `cargo build --release` and add `dcpu16/target/release` to your `PATH`:
+
 * assembler
-  * `$ assembler program.asm -o program.bin`
+  * `$ dcpu16-assembler program.asm -o program.bin`
 * disassembler
-  * `$ disassembler program.bin`
+  * `$ dcpu16-disassembler program.bin`
 * tokenizer
-  * `$ tokenizer program.bin`
+  * `$ dcpu16-tokenizer program.bin`
 * emulator
-  * `$ emulator -p program.bin`
+  * `$ dcpu16 -p program.bin`
 
 ## Library
 
