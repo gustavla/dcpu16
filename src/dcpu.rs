@@ -7,7 +7,7 @@ use std::io::Result;
 
 use instructions::*;
 
-pub const MEMORY_SIZE: usize = 65536;
+pub const MEMORY_SIZE: usize = 0xffff;
 
 pub const REG_A: usize = 0;
 pub const REG_B: usize = 1;
@@ -193,6 +193,7 @@ pub struct DCPU {
     ia: u16,
     skip_next: bool,
     cycle: usize,
+    overshot_cycles: isize,
     pub devices: Vec<Box<Hardware>>,
 }
 
@@ -208,14 +209,34 @@ impl DCPU {
             ia: 0,
             skip_next: false,
             cycle: 0,
+            overshot_cycles: 0,
             devices: Vec::new(),
         }
     }
 
-    /*
+    // Run multiple ticks until cycles have been met
+    // Resets cycle count, so that it won't overflow
+    pub fn run(&mut self, cycles: usize) {
+        let end_cycle = ((self.cycle + cycles) as isize - self.overshot_cycles) as usize;
+
+        while self.cycle < end_cycle {
+            self.tick();
+        }
+        self.overshot_cycles = self.cycle as isize - end_cycle as isize;
+
+        // Pretend cycle is u16 and let it overflow safely
+        while self.cycle > 0xffff {
+            self.cycle -= 0xffff;
+        }
+    }
+
+    pub fn get_cycle(&self) -> usize{
+        self.cycle
+    }
+
     fn reset(&mut self) {
         self.terminate = false;
-        for i in 0..65536 {
+        for i in 0..MEMORY_SIZE {
             self.mem[i] = 0;
         }
         for i in 0..8 {
@@ -226,9 +247,10 @@ impl DCPU {
         self.ex = 0;
         self.ia = 0;
         self.cycle = 0;
+        self.overshot_cycles = 0;
         self.skip_next = false;
+        self.devices = Vec::new();
     }
-    */
 
     fn pcplus(&mut self, movepc: bool) -> u16 {
         let oldpc = self.pc;
