@@ -1,3 +1,5 @@
+[![Crates.io](https://img.shields.io/crates/v/dcpu16.svg)](https://crates.io/crates/dcpu16)
+
 # DCPU-16
 
 DCPU-16 assembler, disassembler and emulator written in Rust 1.0.
