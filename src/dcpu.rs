@@ -279,7 +279,7 @@ impl DCPU {
                 self.mem[(pos + offset) as usize] = value;
             },
             0x18 => {
-                self.sp -= 1;
+                self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
                 self.mem[self.sp as usize] = value;
             },
             0x19 => {
