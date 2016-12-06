@@ -602,10 +602,9 @@ impl DCPU {
             JSR => {
                 self.cycle += 3;
                 self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
-                self.mem[self.sp as usize] = self.pc + 1;
+                self.mem[self.sp as usize] = self.pc;
                 self.pc = self.get(id_a, true, true);
             },
-
             HWN => {
                 self.cycle += 2;
                 let n_devices = self.devices.len() as u16;
