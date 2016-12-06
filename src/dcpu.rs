@@ -718,6 +718,22 @@ impl DCPU {
             }
             println!("");
         }
+
+        /* 
+        // Use this code to print the bottom (the stack)
+        for i in (0xffff-8)/8..(0x10000/8) {
+            let p = i * 8;
+            print!("{:04x}: ", p);
+            for j in 0..8usize {
+                if self.pc as usize == p + j {
+                    print!("\x1b[32m{:04x}\x1b[0m ", self.mem[(p + j) as usize]);
+                } else {
+                    print!("{:04x} ", self.mem[(p + j) as usize]);
+                }
+            }
+            println!("");
+        }
+        */
     }
 }
 
