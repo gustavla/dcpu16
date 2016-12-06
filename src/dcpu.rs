@@ -7,7 +7,7 @@ use std::io::Result;
 
 use instructions::*;
 
-pub const MEMORY_SIZE: usize = 0xffff;
+pub const MEMORY_SIZE: usize = 0x10000;
 
 pub const REG_A: usize = 0;
 pub const REG_B: usize = 1;

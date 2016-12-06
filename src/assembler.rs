@@ -1,4 +1,3 @@
-use std::io::prelude::*;
 use std::fmt;
 use std::str;
 use std::ascii::AsciiExt;
