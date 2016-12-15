@@ -337,6 +337,7 @@ fn special_opcode(s: &str) -> Option<usize> {
         "HWI" => Some(HWI),
         // Extra
         "OUT" => Some(OUT),
+        "OUV" => Some(OUV),
         _ => None,
     }
 }

@@ -39,3 +39,4 @@ pub const HWI: usize = 0x12;
 
 // Extended
 pub const OUT: usize = 0x13;
+pub const OUV: usize = 0x14;

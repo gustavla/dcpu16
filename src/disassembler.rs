@@ -103,6 +103,7 @@ fn special_opcode_str(opcode: usize) -> Result<&'static str, ()> {
         HWI => Ok("HWI"),
         // Extra
         OUT => Ok("OUT"),
+        OUV => Ok("OUV"),
         _ => Err(()),
     }
 }

@@ -32,7 +32,6 @@ To run DCPU-16 programs with hardware devices (such as a monitor), use:
 ## Planned
 
 * Emulator
-  * ADX, SBX, STI, STD
   * INT, IAG, IAS, RFI, IAQ
   * Better support for hardware
 
@@ -63,6 +62,7 @@ Some extensions (possibly temporary):
      C | VAL  | NAME  | DESCRIPTION
     ---+------+-------+-------------------------------------------------------------
      0 | 0x13 | OUT a | prints a null-terminated string located at a in memory
+     0 | 0x14 | OUV a | prints a value in decimal and newline
     ---+------+-------+-------------------------------------------------------------
 
 Since hardware is not supported, you can use `OUT` to print to regular standard

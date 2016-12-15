@@ -691,6 +691,10 @@ impl DCPU {
                     }
                 }
             }
+            OUV => {
+                let a = self.value(id_a, true, true);
+                println!("{}", a);
+            },
             _ => {},
         }
     }
