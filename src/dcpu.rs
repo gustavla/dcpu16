@@ -336,11 +336,9 @@ impl DCPU {
             0x18 => {
                 if is_a {
                     let oldsp = self.sp;
-                    //self.sp = (((self.sp as usize) + 1) % MEMORY_SIZE) as u16;
                     self.sp = self.sp.wrapping_add(1);
                     self.mem[oldsp as usize]
                 } else {
-                    //self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
                     self.sp = self.sp.wrapping_sub(1);
                     self.mem[self.sp as usize]
                 }
@@ -658,11 +656,11 @@ impl DCPU {
                         (0, 0, 0, 0, 0)
                     },
                 };
-                self.set(0, i1);
-                self.set(1, i2);
-                self.set(2, i3);
-                self.set(3, i4);
-                self.set(4, i5);
+                self.reg[REG_A] = i1;
+                self.reg[REG_B] = i2;
+                self.reg[REG_C] = i3;
+                self.reg[REG_X] = i4;
+                self.reg[REG_Y] = i5;
             },
             HWI => {
                 self.cycle += 4;
@@ -677,7 +675,7 @@ impl DCPU {
                     self.devices.insert(device_id, device);
                 }
             },
-            /* Extensions */
+            // Extensions
             OUT => {
                 // Temporary printing
                 // OUT p  (prints memory address p as a null-terminated string)
