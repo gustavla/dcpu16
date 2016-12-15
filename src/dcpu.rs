@@ -632,8 +632,9 @@ impl DCPU {
             JSR => {
                 self.cycle += 3;
                 self.sp = self.sp.wrapping_sub(1);
+                let new_pc = self.value(id_a, true, true);
                 self.mem[self.sp as usize] = self.pc;
-                self.pc = self.value(id_a, true, true);
+                self.pc = new_pc;
             },
             HWN => {
                 self.cycle += 2;
