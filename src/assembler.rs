@@ -6,13 +6,59 @@ use std::collections::HashMap;
 use dcpu::MEMORY_SIZE;
 use instructions::*;
 
+const MAX_PRIO: usize = 2;
+
 struct UnassignedLabel {
     addr: u16,
     label: u16,
     offset: u16,
 }
 
-// PCPU contains the parsing state of a DCPU
+/// PCPU contains the parsing state of a DCPU.
+///
+/// ```
+/// Grammar (EBNF)
+///
+/// program = line, { '\n', line } ;
+///
+/// line = [ label_def ], instr ;
+///
+/// label_def = ':', label ;
+///
+/// instr = basic_op, value, ',', value
+///       | special_op, value
+///       | data_op, data_literal, { ',', data_literal }
+///       ;
+///
+/// basic_op = 'SET' | 'ADD' | ... | 'STD' ;
+/// special_op = 'JSR' | ... | 'HWI' ;
+/// data_op = 'DAT' ;
+///
+/// value = numerical_literal
+///       | register
+///       | label
+///       | '[', literal, ']'
+///       | '[', register, ']'
+///       | '[', numerical_literal, '+', register, ']'
+///       | '[', register, '+', numerical_literal, ']'
+///       | '[', label, ']'
+///       ;
+///
+/// label = letter, { alphanumeric }
+///
+/// register = 'A' | 'B' | 'C' | 'X' | 'Y' | 'Z' | 'I' | 'J' ;
+///
+/// data_literal = numerical_literal | string_literal ;
+///
+/// numerical_literal =
+///                   | numerical_literal, '+', numerical_literal   TODO
+///                   | decimal
+///                   | hexadecimal
+///                   ;   (e.g. -123, 0xff)
+///
+/// string_literal = c_like_string (e.g. "This is \"the\" string\n")
+/// ```
+
 pub struct PCPU {
     // Memory
     pub mem: [u16; MEMORY_SIZE],
@@ -61,45 +107,6 @@ impl PCPU {
         }
     }
 }
-
-/*
-Grammar (EBNF)
-
-program = line, { '\n', line } ;
-
-line = instr | label ;
-
-instr = basic_op, value, ',', value
-      | special_op, value
-      | data_op, data_value, { ',', data_value }
-      | ':', label
-      ;
-
-basic_op = 'SET' | 'ADD' | ... | 'STD' ;
-special_op = 'JSR' | ... | 'HWI' ;
-data_op = 'DAT' ;
-
-value = numerical_literal
-      | register
-      | label
-      | '[', literal, ']'
-      | '[', register, ']'
-      | '[', numerical_literal, '+', register, ']'
-      | '[', register, '+', numerical_literal, ']'
-      | '[', label, ']'
-      ;
-
-label = letter, { alphanumeric }
-
-register = 'A' | 'B' | 'C' | 'X' | 'Y' | 'Z' | 'I' | 'J' ;
-
-numerical_literal = decimal | hexadecimal ;   (e.g. -123, 0xff)
-
-string_literal = c_like_string (e.g. "This is \"the\" string\n")
-*/
-
-//const BUFSIZE: usize = 256;
-//const BUFFLUSH: usize = BUFSIZE - 16;
 
 #[derive(Debug, Copy, Clone)]
 pub enum ParsingErrorType {
@@ -186,13 +193,14 @@ impl ParsingInfo {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum TokenType {
     NumericLiteral(u16),
     StringLiteral(u16),
     BasicOpcode(usize),
     SpecialOpcode(usize),
     DataOpcode,
+    DataFillOpcode,
     Label(u16),
     Registry(u16),
     Pick,
@@ -203,12 +211,16 @@ pub enum TokenType {
     SP,
     EX,
     Addition,
+    Subtraction,
+    Multiplication,
+    Division,
     LeftBracket,
     RightBracket,
     Comma,
     Colon,
 }
 
+#[derive(Clone)]
 pub struct Token {
     pub ttype: TokenType,
     pub col: usize,
@@ -223,6 +235,7 @@ impl fmt::Display for TokenType {
             &TokenType::BasicOpcode(i) => write!(f, "BasicOpcode({})", i),
             &TokenType::SpecialOpcode(i) => write!(f, "SpecialOpcode({})", i),
             &TokenType::DataOpcode => write!(f, "DataOpcode"),
+            &TokenType::DataFillOpcode => write!(f, "DataFillOpcode"),
             &TokenType::Label(i) => write!(f, "Label({})", i),
             &TokenType::Registry(i) => write!(f, "Registry({})", i),
             &TokenType::Pick => write!(f, "Pick"),
@@ -233,6 +246,9 @@ impl fmt::Display for TokenType {
             &TokenType::SP => write!(f, "SP"),
             &TokenType::EX => write!(f, "EX"),
             &TokenType::Addition => write!(f, "Addition"),
+            &TokenType::Subtraction => write!(f, "Subtraction"),
+            &TokenType::Multiplication => write!(f, "Multiplication"),
+            &TokenType::Division => write!(f, "Division"),
             &TokenType::LeftBracket => write!(f, "LeftBracket"),
             &TokenType::RightBracket => write!(f, "RightBracket"),
             &TokenType::Comma => write!(f, "Comma"),
@@ -334,6 +350,9 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
             '[' => Token { ttype: TokenType::LeftBracket, col: i, len: 1 },
             ']' => Token { ttype: TokenType::RightBracket, col: i, len: 1 },
             '+' => Token { ttype: TokenType::Addition, col: i, len: 1},
+            //'-' => Token { ttype: TokenType::Subtraction, col: i, len: 1},
+            '*' => Token { ttype: TokenType::Multiplication, col: i, len: 1},
+            '/' => Token { ttype: TokenType::Division, col: i, len: 1},
             ',' => Token { ttype: TokenType::Comma, col: i, len: 1},
             ':' => Token { ttype: TokenType::Colon, col: i, len: 1},
             ';' => break,
@@ -403,6 +422,7 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                                             (line.chars().nth(i+1).unwrap() == 'X' ||
                                              line.chars().nth(i+1).unwrap() == 'x') {
                     i += 2;
+                    end_col += 2;
                     // Hexadecimal
                     let mut s: String = String::new();
                     while i < line.len() {
@@ -473,7 +493,6 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                         break;
                     }
                 }
-                //println!("i = {}, col = {}", i, col);
                 if i + 1 == col {
                     let err = ParsingError{ line: line_no,
                                             col: col,
@@ -499,6 +518,10 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
                             len: 3 }
                 } else if s.to_ascii_uppercase() == "DAT" {
                     Token { ttype: TokenType::DataOpcode,
+                            col: col,
+                            len: 3 }
+                } else if s.to_ascii_uppercase() == "DAF" {
+                    Token { ttype: TokenType::DataFillOpcode,
                             col: col,
                             len: 3 }
                 } else {
@@ -540,6 +563,99 @@ pub fn tokenize(line_no: usize, line: &str, cpu: &mut PCPU) -> Result<Vec<Token>
     Ok(tokens)
 }
 
+fn process_canon(tokens: &Vec<Token>, prio: usize) -> (Vec<Token>, bool) {
+    let mut new_tokens = vec![];
+    let mut changed = false;
+    let mut i = 0;
+    while i < tokens.len() {
+        if prio == 1 && i + 2 < tokens.len() {
+            let token = match (tokens[i].ttype.clone(), tokens[i + 1].ttype.clone(), tokens[i + 2].ttype.clone()) {
+                (TokenType::NumericLiteral(v1), TokenType::Addition, TokenType::NumericLiteral(v2)) => {
+                    let token = Token {
+                        ttype: TokenType::NumericLiteral(v1.wrapping_add(v2)),
+                        col: tokens[i].col,
+                        len: tokens[i + 2].col + tokens[i + 2].len - tokens[i].col,
+                    };
+                    i += 3;
+                    changed = true;
+                    token
+                },
+                (TokenType::NumericLiteral(v1), TokenType::Subtraction, TokenType::NumericLiteral(v2)) => {
+                    let token = Token {
+                        ttype: TokenType::NumericLiteral(v1.wrapping_sub(v2)),
+                        col: tokens[i].col,
+                        len: tokens[i + 2].col + tokens[i + 2].len - tokens[i].col,
+                    };
+                    i += 3;
+                    changed = true;
+                    token
+                },
+                _ => {
+                    let token = tokens[i].clone();
+                    i += 1;
+                    token
+                },
+            };
+            new_tokens.push(token);
+        } else if prio == 2 && i + 2 < tokens.len() {
+            let token = match (tokens[i].ttype.clone(), tokens[i + 1].ttype.clone(), tokens[i + 2].ttype.clone()) {
+                (TokenType::NumericLiteral(v1), TokenType::Multiplication, TokenType::NumericLiteral(v2)) => {
+                    let token = Token {
+                        ttype: TokenType::NumericLiteral(v1.wrapping_mul(v2)),
+                        col: tokens[i].col,
+                        len: tokens[i + 2].col + tokens[i + 2].len - tokens[i].col,
+                    };
+                    i += 3;
+                    changed = true;
+                    token
+                },
+                (TokenType::NumericLiteral(v1), TokenType::Division, TokenType::NumericLiteral(v2)) => {
+                    let token = Token {
+                        ttype: TokenType::NumericLiteral(v1.wrapping_div(v2)),
+                        col: tokens[i].col,
+                        len: tokens[i + 2].col + tokens[i + 2].len - tokens[i].col,
+                    };
+                    i += 3;
+                    changed = true;
+                    token
+                },
+                _ => {
+                    let token = tokens[i].clone();
+                    i += 1;
+                    token
+                },
+            };
+            new_tokens.push(token);
+        } else {
+            new_tokens.push(tokens[i].clone());
+            i += 1;
+        }
+    }
+    (new_tokens, changed)
+}
+
+pub fn canonize_tokens(tokens: &Vec<Token>) -> Vec<Token> {
+    let mut new_tokens = tokens.clone();
+
+    let mut changed = true;
+    let mut prio = MAX_PRIO;
+    while changed {
+        let (new_tokens_, changed_) = process_canon(&new_tokens, prio);
+
+        changed = changed_;
+        new_tokens = new_tokens_;
+
+        if changed {
+            prio = MAX_PRIO;
+        } else if prio > 0 {
+            changed = true;
+            prio -= 1;
+        }
+    }
+
+    new_tokens
+}
+
 fn process_value(value: u16, allow_inline: bool) -> Result<ParsingInfo, ParsingError> {
     let info = if value == 0xffff && allow_inline {
         ParsingInfo::new_single(0x20)
@@ -553,12 +669,12 @@ fn process_value(value: u16, allow_inline: bool) -> Result<ParsingInfo, ParsingE
 
 fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                cpu: &mut PCPU, lvalue: bool) -> Result<ParsingInfo, ParsingError> {
-    let ttype = try!(get_token_type(line_no, tokens, *cur));
+    let ttype = try!(fetch_token_type(line_no, tokens, *cur));
     match *ttype {
         TokenType::NumericLiteral(value) => {
             // Can't have numeric literals as lvalues
             /*
-            TODO: Disabled, since sometimes permissble, such as with IF*
+            TODO: Disabled, since sometimes permissable, such as with IF*
             if lvalue {
                 return Err(ParsingError{line: line_no,
                                         col: tokens[*cur].col,
@@ -590,7 +706,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
         },
         TokenType::Pick => {
             *cur += 1;
-            let ttype0 = try!(get_token_type(line_no, tokens, *cur));
+            let ttype0 = try!(fetch_token_type(line_no, tokens, *cur));
             match *ttype0 {
                 TokenType::NumericLiteral(v) => {
                     *cur += 1;
@@ -662,11 +778,11 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
 
         TokenType::LeftBracket => {
             *cur += 1;
-            let ttype0 = try!(get_token_type(line_no, tokens, *cur));
+            let ttype0 = try!(fetch_token_type(line_no, tokens, *cur));
             match *ttype0 {
                 TokenType::Registry(reg) => {
                     *cur += 1;
-                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
@@ -675,11 +791,11 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                         },
                         TokenType::Addition => {
                             *cur += 1;
-                            let ttype2 = try!(get_token_type(line_no, tokens, *cur));
+                            let ttype2 = try!(fetch_token_type(line_no, tokens, *cur));
                             match *ttype2 {
                                 TokenType::NumericLiteral(offset) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -698,7 +814,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                 },
                                 TokenType::Label(id) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -745,7 +861,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                 },
                 TokenType::NumericLiteral(v0) => {
                     *cur += 1;
-                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
@@ -754,11 +870,11 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                         },
                         TokenType::Addition => {
                             *cur += 1;
-                            let ttype2 = try!(get_token_type(line_no, tokens, *cur));
+                            let ttype2 = try!(fetch_token_type(line_no, tokens, *cur));
                             match *ttype2 {
                                 TokenType::Registry(reg) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -777,7 +893,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                 },
                                 TokenType::Label(id) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -824,7 +940,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                 },
                 TokenType::Label(id) => {
                     *cur += 1;
-                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                     match *ttype1 {
                         TokenType::RightBracket => {
                             *cur += 1;
@@ -840,11 +956,11 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                         },
                         TokenType::Addition => {
                             *cur += 1;
-                            let ttype2 = try!(get_token_type(line_no, tokens, *cur));
+                            let ttype2 = try!(fetch_token_type(line_no, tokens, *cur));
                             match *ttype2 {
                                 TokenType::NumericLiteral(offset) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -872,7 +988,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
                                 },
                                 TokenType::Registry(reg) => {
                                     *cur += 1;
-                                    let ttype1 = try!(get_token_type(line_no, tokens, *cur));
+                                    let ttype1 = try!(fetch_token_type(line_no, tokens, *cur));
                                     match *ttype1 {
                                         TokenType::RightBracket => {
                                             *cur += 1;
@@ -937,7 +1053,7 @@ fn parse_value(line_no: usize, tokens: &Vec<Token>, cur: &mut usize,
     //Ok(ParsingInfo::new())
 }
 
-fn get_token_type(line_no: usize, tokens: &Vec<Token>, cur: usize) -> Result<&TokenType, ParsingError> {
+fn fetch_token_type(line_no: usize, tokens: &Vec<Token>, cur: usize) -> Result<&TokenType, ParsingError> {
     if cur >= tokens.len() {
         let err = ParsingError { line: line_no,
                                  col: tokens[tokens.len() - 1].col,
@@ -953,7 +1069,7 @@ fn get_token_type(line_no: usize, tokens: &Vec<Token>, cur: usize) -> Result<&To
 
 fn check_comma(line_no: usize, tokens: &Vec<Token>,
                cur: &mut usize) -> Result<(), ParsingError> {
-    let ttype = try!(get_token_type(line_no, tokens, *cur));
+    let ttype = try!(fetch_token_type(line_no, tokens, *cur));
     match *ttype {
         TokenType::Comma => {
             *cur += 1;
@@ -989,7 +1105,7 @@ fn parse_basic_opcode(line_no: usize,
                       tokens: &Vec<Token>,
                       cur: &mut usize,
                       cpu: &mut PCPU) -> Result<(), ParsingError> {
-    let ttype = try!(get_token_type(line_no, tokens, *cur));
+    let ttype = try!(fetch_token_type(line_no, tokens, *cur));
     match ttype {
         &TokenType::BasicOpcode(opcode) => {
             *cur += 1;
@@ -1044,7 +1160,7 @@ fn parse_special_opcode(line_no: usize,
                         tokens: &Vec<Token>,
                         cur: &mut usize,
                         cpu: &mut PCPU) -> Result<(), ParsingError> {
-    let ttype = try!(get_token_type(line_no, tokens, *cur));
+    let ttype = try!(fetch_token_type(line_no, tokens, *cur));
     match ttype {
         &TokenType::SpecialOpcode(opcode) => {
             *cur += 1;
@@ -1097,7 +1213,7 @@ fn parse_data_opcode(line_no: usize,
         }
         first = false;
 
-        let ttype = try!(get_token_type(line_no, tokens, *cur));
+        let ttype = try!(fetch_token_type(line_no, tokens, *cur));
         match ttype {
             &TokenType::NumericLiteral(value) => {
                 *cur += 1;
@@ -1124,11 +1240,64 @@ fn parse_data_opcode(line_no: usize,
     Ok(ParsingInfo::new())
 }
 
+fn parse_data_fill_opcode(line_no: usize,
+                     tokens: &Vec<Token>,
+                     cur: &mut usize,
+                     cpu: &mut PCPU) -> Result<ParsingInfo, ParsingError> {
+
+    // Eat the DAF opcode
+    *cur += 1;
+
+    let ttype = try!(fetch_token_type(line_no, tokens, *cur));
+    let count = match ttype {
+        &TokenType::NumericLiteral(value) => {
+            *cur += 1;
+            value
+        },
+        _ => {
+            let err = ParsingError { line: line_no,
+                                     col: tokens[*cur].col,
+                                     len: tokens[*cur].len,
+                                     global: false,
+                                     etype: ParsingErrorType::ExpectingLiteral };
+            return Err(err);
+        },
+    };
+
+    try!(check_comma(line_no, tokens, cur));
+
+    let ttype2 = try!(fetch_token_type(line_no, tokens, *cur));
+    let value = match ttype2 {
+        &TokenType::NumericLiteral(value) => {
+            *cur += 1;
+            value
+        },
+        _ => {
+            let err = ParsingError { line: line_no,
+                                     col: tokens[*cur].col,
+                                     len: tokens[*cur].len,
+                                     global: false,
+                                     etype: ParsingErrorType::ExpectingLiteral };
+            return Err(err);
+        },
+    };
+
+    try!(check_end_of_line(line_no, tokens, cur));
+
+    // Fill with the value
+    for _ in 0..count {
+        cpu.mem[cpu.pc as usize] = value;
+        cpu.pc = cpu.pc.wrapping_add(1);
+    }
+
+    Ok(ParsingInfo::new())
+}
+
 fn parse_line(line_no: usize, tokens: &Vec<Token>, cpu: &mut PCPU, cur: &mut usize) -> Result<(), ParsingError> {
     if *cur >= tokens.len() {
         return Ok(());
     }
-    match try!(get_token_type(line_no, tokens, *cur)) {
+    match try!(fetch_token_type(line_no, tokens, *cur)) {
         &TokenType::BasicOpcode(_) => {
             try!(parse_basic_opcode(line_no, tokens, cur, cpu));
             Ok(())
@@ -1141,9 +1310,13 @@ fn parse_line(line_no: usize, tokens: &Vec<Token>, cpu: &mut PCPU, cur: &mut usi
             try!(parse_data_opcode(line_no, tokens, cur, cpu));
             Ok(())
         },
+        &TokenType::DataFillOpcode => {
+            try!(parse_data_fill_opcode(line_no, tokens, cur, cpu));
+            Ok(())
+        },
         &TokenType::Colon => {
             *cur += 1;
-            match try!(get_token_type(line_no, tokens, *cur)) {
+            match try!(fetch_token_type(line_no, tokens, *cur)) {
                 &TokenType::Label(v) => {
                     let label = cpu.pc;
                     if !cpu.labels.contains_key(&v) {
@@ -1188,7 +1361,7 @@ pub fn parse(lines: &Vec<String>, cpu: &mut PCPU) -> Result<(), ParsingError> {
             continue;
         }
 
-        let tokens = try!(tokenize(line_no, l, cpu));
+        let tokens = canonize_tokens(&(tokenize(line_no, l, cpu))?);
         let mut cur = 0;
         try!(parse_line(line_no, &tokens, cpu, &mut cur));
 

@@ -11,8 +11,9 @@ use dcpu16::assembler;
 use std::process::exit;
 
 fn main() {
-    let opts = Options::new();
+    let mut opts = Options::new();
     let args: Vec<String> = env::args().collect();
+    opts.optflag("c", "canonize", "canonize");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(why) => {
@@ -20,6 +21,8 @@ fn main() {
             exit(1);
         },
     };
+
+    let canonize = matches.opt_present("c");
 
     if matches.free.len() != 1 {
         println!("Please input file");
@@ -56,8 +59,13 @@ fn main() {
         println!("\x1b[1;37m{}\x1b[0m", l);
         match assembler::tokenize(line_no, l, &mut cpu) {
             Ok(tokens) => {
-                if tokens.len() > 0 {
-                    for t in tokens.iter() {
+                let new_tokens = if canonize {
+                    assembler::canonize_tokens(&tokens)
+                } else {
+                    tokens.clone()
+                };
+                if new_tokens.len() > 0 {
+                    for t in new_tokens.iter() {
                         println!("{} \x1b[1;30m{}:{}\x1b[0m", t.ttype, t.col, t.col+t.len);
                     }
                     println!("");

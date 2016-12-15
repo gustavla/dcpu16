@@ -32,7 +32,7 @@ fn main() {
     let mut cpu = dcpu::DCPU::new();
 
     let path = Path::new(filename);
-    match cpu.load_from_assembly_file(&path) {
+    match cpu.load_from_binary_file(&path) {
         Ok(()) => {},
         Err(why) => {
             println!("Could load file {}: {}", path.display(), why);

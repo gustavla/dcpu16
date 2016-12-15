@@ -4,9 +4,12 @@ use std::path::Path;
 use std::fs::File;
 use std::io::Read;
 use std::io::Result;
+use std::any::Any;
 
 use instructions::*;
 
+// Note: this can't be changed willy-nilly, since the PC is naturally wrapped around, so it will
+// not wrap around correctly if this is changed.
 pub const MEMORY_SIZE: usize = 0x10000;
 
 pub const REG_A: usize = 0;
@@ -27,8 +30,7 @@ pub trait Hardware {
     fn info_manufacturer_id_lower(&self) -> u16;
     fn info_version(&self) -> u16;
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
-
-    fn get_data(&self, cpu: &DCPU) -> Vec<u8>;
+    fn as_any(&self) -> &Any;
 }
 
 // Some example Hardware implementations
@@ -188,12 +190,13 @@ pub struct DCPU {
     pub reg: [u16; 8],
     pub mem: [u16; MEMORY_SIZE],
     pub pc: u16,
-    sp: u16,
-    ex: u16,
-    ia: u16,
+    pub sp: u16,
+    pub ex: u16,
+    pub ia: u16,
     skip_next: bool,
     cycle: usize,
     overshot_cycles: isize,
+    inside_run: bool,
     pub devices: Vec<Box<Hardware>>,
 }
 
@@ -210,6 +213,7 @@ impl DCPU {
             skip_next: false,
             cycle: 0,
             overshot_cycles: 0,
+            inside_run: false,
             devices: Vec::new(),
         }
     }
@@ -217,6 +221,12 @@ impl DCPU {
     // Run multiple ticks until cycles have been met
     // Resets cycle count, so that it won't overflow
     pub fn run(&mut self, cycles: usize) {
+        self.inside_run = true;
+        if self.overshot_cycles > cycles as isize {
+            self.overshot_cycles -= cycles as isize;
+            return;
+        }
+
         let end_cycle = ((self.cycle + cycles) as isize - self.overshot_cycles) as usize;
 
         while self.cycle < end_cycle {
@@ -228,10 +238,21 @@ impl DCPU {
         while self.cycle > 0xffff {
             self.cycle -= 0xffff;
         }
+        self.inside_run = false;
     }
 
-    pub fn get_cycle(&self) -> usize{
+    /// Get cycle count
+    pub fn cycle(&self) -> usize {
         self.cycle
+    }
+
+    /// Halts the DCPU for a specified number of cycles.
+    pub fn halt(&mut self, cycles: usize) -> () {
+        if self.inside_run {
+            self.cycle += cycles;
+        } else {
+            self.overshot_cycles += cycles as isize;
+        }
     }
 
     fn reset(&mut self) {
@@ -255,11 +276,7 @@ impl DCPU {
     fn pcplus(&mut self, movepc: bool) -> u16 {
         let oldpc = self.pc;
         if movepc {
-            if self.pc == 0xffff {
-                self.pc = 0;
-            } else {
-                self.pc += 1;
-            }
+            self.pc = self.pc.wrapping_add(1);
         }
         oldpc
     }
@@ -276,10 +293,10 @@ impl DCPU {
                 self.cycle += 1;
                 let pos = self.reg[(identifier - 0x10) as usize];
                 let offset = self.mem[self.pcplus(true) as usize];
-                self.mem[(pos + offset) as usize] = value;
+                self.mem[pos.wrapping_add(offset) as usize] = value;
             },
             0x18 => {
-                self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
+                self.sp = self.sp.wrapping_sub(1);
                 self.mem[self.sp as usize] = value;
             },
             0x19 => {
@@ -287,7 +304,7 @@ impl DCPU {
             },
             0x1a => {
                 self.cycle += 1;
-                let pos = self.sp + self.mem[self.pcplus(true) as usize];
+                let pos = self.sp.wrapping_add(self.mem[self.pcplus(true) as usize]);
                 self.mem[pos as usize] = value;
             },
             0x1b => { self.sp = value; },
@@ -303,7 +320,7 @@ impl DCPU {
         }
     }
 
-    fn get(&mut self, identifier: usize, is_a: bool, movepc: bool) -> u16 {
+    fn value(&mut self, identifier: usize, is_a: bool, movepc: bool) -> u16 {
         match identifier {
             0x00 ... 0x07  => { self.reg[identifier as usize] },
             0x08 ... 0x0f => {
@@ -314,22 +331,24 @@ impl DCPU {
                 self.cycle += 1;
                 let pos = self.reg[(identifier - 0x10) as usize];
                 let offset = self.mem[self.pcplus(movepc) as usize];
-                self.mem[(pos + offset) as usize]
+                self.mem[pos.wrapping_add(offset) as usize]
             },
             0x18 => {
                 if is_a {
                     let oldsp = self.sp;
-                    self.sp = (((self.sp as usize) + 1) % MEMORY_SIZE) as u16;
+                    //self.sp = (((self.sp as usize) + 1) % MEMORY_SIZE) as u16;
+                    self.sp = self.sp.wrapping_add(1);
                     self.mem[oldsp as usize]
                 } else {
-                    self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
+                    //self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
+                    self.sp = self.sp.wrapping_sub(1);
                     self.mem[self.sp as usize]
                 }
             },
             0x19 => { self.mem[self.sp as usize] },
             0x1a => {
                 self.cycle += 1;
-                let pos = self.sp + self.mem[self.pcplus(movepc) as usize];
+                let pos = self.sp.wrapping_add(self.mem[self.pcplus(movepc) as usize]);
                 self.mem[pos as usize]
             },
             0x1b => { self.sp },
@@ -354,8 +373,8 @@ impl DCPU {
         }
     }
 
-    fn get_signed(&mut self, identifier: usize, is_a: bool, movepc: bool) -> i16 {
-        let v = self.get(identifier, is_a, movepc);
+    fn value_signed(&mut self, identifier: usize, is_a: bool, movepc: bool) -> i16 {
+        let v = self.value(identifier, is_a, movepc);
         v as i16
     }
 
@@ -397,14 +416,15 @@ impl DCPU {
                 },
                 SET => {
                     self.cycle += 1;
-                    let v = self.get(id_a, true, true);
+                    let v = self.value(id_a, true, true);
                     self.set(id_b, v);
                 },
                 ADD => {
                     self.cycle += 2;
-                    let v = (self.get(id_a, true, true) as i32) +
-                            (self.get(id_b, false, false) as i32);
-                    if v >= 0xffff {
+                    // TODO: Use overflow_add
+                    let v = (self.value(id_a, true, true) as i32) +
+                            (self.value(id_b, false, false) as i32);
+                    if v > 0xffff {
                         self.ex = 1;
                     } else {
                         self.ex = 0;
@@ -413,20 +433,20 @@ impl DCPU {
                 },
                 SUB => {
                     self.cycle += 2;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
                     if a > b {
                         self.ex = 0xffff;
                     } else {
                         self.ex = 0;
                     }
-                    let v = b - a;
+                    let v = b.wrapping_sub(a);
                     self.set(id_b, v);
                 },
                 MUL => {
                     self.cycle += 2;
-                    let v = (self.get(id_a, true, true) as i32) *
-                            (self.get(id_b, false, false) as i32);
+                    let v = (self.value(id_a, true, true) as i32) *
+                            (self.value(id_b, false, false) as i32);
                     if v > 0xffff || v < 0 {
                         self.ex = ((v >> 16) & 0xffff) as u16;
                     } else {
@@ -436,8 +456,8 @@ impl DCPU {
                 },
                 MLI => {
                     self.cycle += 2;
-                    let v = (self.get_signed(id_a, true, true) as i32) *
-                            (self.get_signed(id_b, false, false) as i32);
+                    let v = (self.value_signed(id_a, true, true) as i32) *
+                            (self.value_signed(id_b, false, false) as i32);
                     if v > 0xffff || v < 0 {
                         self.ex = ((v >> 16) & 0xffff) as u16;
                     } else {
@@ -447,8 +467,8 @@ impl DCPU {
                 },
                 DIV => {
                     self.cycle += 3;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
                     let v = if a == 0 {
                         self.ex = 0;
                         0u16
@@ -460,8 +480,8 @@ impl DCPU {
                 },
                 DVI => {
                     self.cycle += 3;
-                    let a = self.get_signed(id_a, true, true);
-                    let b = self.get_signed(id_b, false, false);
+                    let a = self.value_signed(id_a, true, true);
+                    let b = self.value_signed(id_b, false, false);
                     let v = if a == 0 {
                         self.ex = 0;
                         0i16
@@ -473,8 +493,8 @@ impl DCPU {
                 },
                 MOD => {
                     self.cycle += 3;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
                     let v = if a != 0 {
                         b % a
                     } else {
@@ -484,8 +504,8 @@ impl DCPU {
                 },
                 MDI => {
                     self.cycle += 3;
-                    let a = self.get_signed(id_a, true, true);
-                    let b = self.get_signed(id_b, false, false);
+                    let a = self.value_signed(id_a, true, true);
+                    let b = self.value_signed(id_b, false, false);
                     let v = if a != 0 {
                         b % a
                     } else {
@@ -495,95 +515,105 @@ impl DCPU {
                 },
                 AND => {
                     self.cycle += 1;
-                    let v = self.get(id_a, true, true) & self.get(id_b, false, false);
+                    let v = self.value(id_a, true, true) & self.value(id_b, false, false);
                     self.set(id_b, v);
                 },
                 BOR => {
                     self.cycle += 1;
-                    let v = self.get(id_a, true, true) | self.get(id_b, false, false);
+                    let v = self.value(id_a, true, true) | self.value(id_b, false, false);
                     self.set(id_b, v);
                 },
                 XOR => {
                     self.cycle += 1;
-                    let v = self.get(id_a, true, true) ^ self.get(id_b, false, false);
+                    let v = self.value(id_a, true, true) ^ self.value(id_b, false, false);
                     self.set(id_b, v);
                 },
+                // TODO: These can panic (in debug mode) if shifting too much (>=16)
                 SHR => {
                     self.cycle += 1;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
                     let v = b >> a;
                     self.ex = (((b as u32) << 16)>>a) as u16;
                     self.set(id_b, v);
                 },
                 ASR => {
                     self.cycle += 1;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get_signed(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value_signed(id_b, false, false);
                     let v = (b >> a) as u16;
                     self.ex = (((b as u32) << 16)>> (a as u32)) as u16;
                     self.set(id_b, v);
                 },
                 SHL => {
                     self.cycle += 1;
-                    let a = self.get(id_a, true, true);
-                    let b = self.get(id_b, false, false);
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
                     self.ex = (((b as u32) << (a as u32)) >> 16) as u16;
                     let v = b << a;
                     self.set(id_b, v);
                 },
                 IFB => {
                     self.cycle += 2;
-                    let truth = (self.get(id_b, false, true) & self.get(id_a, true, true)) != 0;
+                    let truth = (self.value(id_b, false, true) & self.value(id_a, true, true)) != 0;
                     self.process_conditional(truth);
                 },
                 IFC => {
                     self.cycle += 2;
-                    let truth = (self.get(id_b, false, true) & self.get(id_a, true, true)) == 0;
+                    let truth = (self.value(id_b, false, true) & self.value(id_a, true, true)) == 0;
                     self.process_conditional(truth);
                 },
                 IFE => {
                     self.cycle += 2;
-                    let truth = self.get(id_b, false, true) == self.get(id_a, true, true);
+                    let truth = self.value(id_b, false, true) == self.value(id_a, true, true);
                     self.process_conditional(truth);
                 },
                 IFN => {
                     self.cycle += 2;
-                    let truth = self.get(id_b, false, true) != self.get(id_a, true, true);
+                    let truth = self.value(id_b, false, true) != self.value(id_a, true, true);
                     self.process_conditional(truth);
                 },
                 IFG => {
                     self.cycle += 2;
-                    let truth = self.get(id_b, false, true) > self.get(id_a, true, true);
+                    let truth = self.value(id_b, false, true) > self.value(id_a, true, true);
                     self.process_conditional(truth);
                 },
                 IFA => {
                     self.cycle += 2;
-                    let truth = self.get_signed(id_b, false, true) > self.get_signed(id_a, true, true);
+                    let truth = self.value_signed(id_b, false, true) > self.value_signed(id_a, true, true);
                     self.process_conditional(truth);
                 },
                 IFL => {
                     self.cycle += 2;
-                    let truth = self.get(id_b, false, true) < self.get(id_a, true, true);
+                    let truth = self.value(id_b, false, true) < self.value(id_a, true, true);
                     self.process_conditional(truth);
                 },
                 IFU => {
                     self.cycle += 2;
-                    let truth = self.get_signed(id_b, false, true) < self.get_signed(id_a, true, true);
+                    let truth = self.value_signed(id_b, false, true) < self.value_signed(id_a, true, true);
                     self.process_conditional(truth);
                 },
-                /* TODO: ADX, SBX, STI, STD */
                 ADX => {
-
+                    self.cycle += 3;
+                    // TODO: Use overflow_add
+                    let v = (self.value(id_a, true, true) as i32) +
+                            (self.value(id_b, false, false) as i32) +
+                            self.ex as i32;
+                    if v > 0xffff {
+                        self.ex = 1;
+                    } else {
+                        self.ex = 0;
+                    }
+                    self.set(id_b, (v & 0xffff) as u16); // & might not be needed
                 },
                 SBX => {
-
+                    // TODO
                 },
                 STI => {
-
+                    // TODO
                 },
                 STD => {
-
+                    // TODO
                 },
                 _ => {},
             }
@@ -601,9 +631,9 @@ impl DCPU {
             },
             JSR => {
                 self.cycle += 3;
-                self.sp = (((self.sp as usize) + MEMORY_SIZE - 1) % MEMORY_SIZE) as u16;
+                self.sp = self.sp.wrapping_sub(1);
                 self.mem[self.sp as usize] = self.pc;
-                self.pc = self.get(id_a, true, true);
+                self.pc = self.value(id_a, true, true);
             },
             HWN => {
                 self.cycle += 2;
@@ -612,7 +642,7 @@ impl DCPU {
             },
             HWQ => {
                 self.cycle += 4;
-                let device_id = self.get(id_a, true, true) as usize;
+                let device_id = self.value(id_a, true, true) as usize;
                 //let n_devices = self.devices.len() as u16;
                 //
                 let (i1, i2, i3, i4, i5) = match self.devices.get(device_id) {
@@ -635,10 +665,10 @@ impl DCPU {
             },
             HWI => {
                 self.cycle += 4;
-                let device_id = self.get(id_a, true, true) as usize;
+                let device_id = self.value(id_a, true, true) as usize;
                 // TODO: I have to remove the device and then add it back in
                 //       I'm sure there is a better way to do this.
-                //       Also, instead of this if statement, perhaps catch 
+                //       Also, instead of this if statement, perhaps catch
                 //       the panic potentially returned by remove.
                 if device_id < self.devices.len() {
                     let mut device = self.devices.remove(device_id);
@@ -650,9 +680,9 @@ impl DCPU {
             OUT => {
                 // Temporary printing
                 // OUT p  (prints memory address p as a null-terminated string)
-                let a = self.get(id_a, true, true);
+                let a = self.value(id_a, true, true);
                 for i in 0..MEMORY_SIZE {
-                    let c = self.mem[((a + i as u16) as u16) as usize];
+                    let c = self.mem[a.wrapping_add(i as u16) as usize];
                     if c == 0 {
                         break;
                     } else {
@@ -664,8 +694,10 @@ impl DCPU {
         }
     }
 
-    pub fn load_from_assembly_file(&mut self, path: &Path) -> Result<()> {
-        let mut file = try!(File::open(&path));
+    /// Loads a binary file into the memory. The file needs to be assembled separately.
+    pub fn load_from_binary_file(&mut self, path: &Path) -> Result<()> {
+        //let mut file = try!(File::open(&path));
+        let mut file = File::open(&path)?;
         let mut i = 0;
         let mut buffer: Vec<u8> = Vec::new();
         try!(file.read_to_end(&mut buffer));
@@ -683,6 +715,11 @@ impl DCPU {
         }
         Ok(())
     }
+
+    // This function will assemble the binary for you, so the input file should be a .dasm16 file.
+    //pub fn load_from_assembly_file(&mut self, path: &Path) -> Result<()> {
+        // TODO
+    //}
 
     #[allow(dead_code)]
     pub fn print(&self) {
@@ -719,7 +756,7 @@ impl DCPU {
             println!("");
         }
 
-        /* 
+        /*
         // Use this code to print the bottom (the stack)
         for i in (0xffff-8)/8..(0x10000/8) {
             let p = i * 8;

@@ -67,6 +67,7 @@ fn main() {
             };
             let mut writer = BufWriter::new(&file);
             for i in 0..cpu.pc {
+                // DCPU-16 assembled files use little-endian
                 let v = cpu.mem[i as usize];
                 buf[0] = (v >> 8) as u8;
                 buf[1] = (v & 0xff) as u8;

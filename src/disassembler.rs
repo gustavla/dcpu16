@@ -154,14 +154,14 @@ fn value_str(cpu: &DCPU, value: usize, offset: &mut u16,
             maybe_colorize("EX".to_string(), COLOR_NAMED, use_color)
         },
         0x1e => {
-            let v = cpu.mem[(cpu.pc + *offset) as usize];
+            let v = cpu.mem[cpu.pc.wrapping_add(*offset) as usize];
             let ss = maybe_colorize(format!("0x{:04x}", v), COLOR_NUM_LITERAL, use_color);
-            *offset += 1;
+            *offset = offset.wrapping_add(1);
             format!("[{}]", ss)
         },
         0x1f => { 
-            let v = cpu.mem[(cpu.pc + *offset) as usize];
-            *offset += 1;
+            let v = cpu.mem[cpu.pc.wrapping_add(*offset) as usize];
+            *offset = offset.wrapping_add(1);
             maybe_colorize(format!("0x{:04x}", v), COLOR_NUM_LITERAL, use_color)
         },
         _ => {
