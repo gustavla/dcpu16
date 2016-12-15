@@ -27,12 +27,12 @@ To run DCPU-16 programs with hardware devices (such as a monitor), use:
   * Basic instructions
   * Conditionals
   * Jumps
+  * Interrupts
   * Some hardware support
 
 ## Planned
 
 * Emulator
-  * INT, IAG, IAS, RFI, IAQ
   * Better support for hardware
 
 ## Binaries

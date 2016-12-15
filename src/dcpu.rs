@@ -193,6 +193,8 @@ pub struct DCPU {
     pub sp: u16,
     pub ex: u16,
     pub ia: u16,
+    interrupt_queueing: bool,
+    interrupt_queue: Vec<u16>,
     skip_next: bool,
     cycle: usize,
     overshot_cycles: isize,
@@ -210,6 +212,8 @@ impl DCPU {
             sp: 0,
             ex: 0,
             ia: 0,
+            interrupt_queueing: false,
+            interrupt_queue: Vec::new(),
             skip_next: false,
             cycle: 0,
             overshot_cycles: 0,
@@ -268,6 +272,8 @@ impl DCPU {
         self.ex = 0;
         self.ia = 0;
         self.cycle = 0;
+        self.interrupt_queue = Vec::new();
+        self.interrupt_queueing = false;
         self.overshot_cycles = 0;
         self.skip_next = false;
         self.devices = Vec::new();
@@ -385,6 +391,11 @@ impl DCPU {
             self.skip_next = true;
             self.cycle += 1;
         }
+    }
+
+    /// Queues up interrupt. Can be used from hardware.
+    pub fn interrupt(&mut self, message: u16) -> () {
+        self.interrupt_queue.push(message);
     }
 
     pub fn tick(&mut self) {
@@ -593,31 +604,67 @@ impl DCPU {
                 },
                 ADX => {
                     self.cycle += 3;
-                    // TODO: Use overflow_add
-                    let v = (self.value(id_a, true, true) as i32) +
-                            (self.value(id_b, false, false) as i32) +
-                            self.ex as i32;
-                    if v > 0xffff {
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
+                    if (a as usize) + (b as usize) + (self.ex as usize) > 0xffff {
                         self.ex = 1;
                     } else {
                         self.ex = 0;
                     }
-                    self.set(id_b, (v & 0xffff) as u16); // & might not be needed
+                    let v = a.wrapping_add(b).wrapping_add(self.ex);
+                    self.set(id_b, v);
                 },
                 SBX => {
-                    // TODO
+                    self.cycle += 3;
+                    let a = self.value(id_a, true, true);
+                    let b = self.value(id_b, false, false);
+                    if (a as usize) + (self.ex as usize) < (b as usize) {
+                        self.ex = 0xffff;
+                    } else {
+                        self.ex = 0;
+                    }
+                    let v = a.wrapping_sub(b).wrapping_add(self.ex);
+                    self.set(id_b, v);
                 },
                 STI => {
-                    // TODO
+                    self.cycle += 2;
+                    let v = self.value(id_a, true, true);
+                    self.set(id_b, v);
+                    // Increment I and J
+                    let v_i = self.reg[REG_I];
+                    let v_j = self.reg[REG_J];
+                    self.reg[REG_I] = v_i.wrapping_add(1);
+                    self.reg[REG_J] = v_j.wrapping_add(1);
                 },
                 STD => {
-                    // TODO
+                    self.cycle += 2;
+                    let v = self.value(id_a, true, true);
+                    self.set(id_b, v);
+                    // Decrement I and J
+                    let v_i = self.reg[REG_I];
+                    let v_j = self.reg[REG_J];
+                    self.reg[REG_I] = v_i.wrapping_sub(1);
+                    self.reg[REG_J] = v_j.wrapping_sub(1);
                 },
                 _ => {},
             }
         }
         if self.skip_next {
             self.tick();
+        } else if !self.interrupt_queue.is_empty() && !self.interrupt_queueing {
+            let message = self.interrupt_queue.remove(0);
+            self.cycle += 4;
+
+            if self.ia != 0 {
+                self.interrupt_queueing = true;
+                self.sp = self.sp.wrapping_sub(1);
+                self.mem[self.sp as usize] = self.pc;
+                self.sp = self.sp.wrapping_sub(1);
+                self.mem[self.sp as usize] = self.reg[REG_A];
+
+                self.pc = self.ia;
+                self.reg[REG_A] = message;
+            }
         }
     }
 
@@ -633,6 +680,50 @@ impl DCPU {
                 let new_pc = self.value(id_a, true, true);
                 self.mem[self.sp as usize] = self.pc;
                 self.pc = new_pc;
+            },
+            INT => {
+                //self.cycle += 4;
+                let message = self.value(id_a, true, true);
+                self.interrupt(message);
+                //if self.ia != 0 {
+                    /*
+                    if self.interrupt_queue.is_empty() && !self.interrupt_queueing {
+                        self.interrupt_queueing = true;
+                        self.sp = self.sp.wrapping_sub(1);
+                        self.mem[self.sp as usize] = self.pc;
+                        self.sp = self.sp.wrapping_sub(1);
+                        self.mem[self.sp as usize] = self.value(REG_A, false, false);
+
+                        self.pc = self.ia;
+                        self.set(REG_A, message);
+                    } else {
+                        self.interrupt_queue.push(message);
+                    }
+                    */
+                //}
+            },
+            IAG => {
+                self.cycle += 1;
+                let ia = self.ia;
+                self.set(id_a, ia);
+            },
+            IAS => {
+                self.cycle += 1;
+                self.ia = self.value(id_a, true, true);
+            },
+            RFI => {
+                self.cycle += 3;
+                self.interrupt_queueing = false;
+                let stack_a = self.mem[self.sp as usize];
+                self.reg[REG_A] = stack_a;
+                self.sp = self.sp.wrapping_add(1);
+                self.pc = self.mem[self.sp as usize];
+                self.sp = self.sp.wrapping_add(1);
+            },
+            IAQ => {
+                self.cycle += 2;
+                let a = self.value(id_a, true, true);
+                self.interrupt_queueing = a > 0;
             },
             HWN => {
                 self.cycle += 2;
