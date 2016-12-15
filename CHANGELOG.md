@@ -1,5 +1,9 @@
 # Changelog
 
+## Next release
+Released: TBD
+* Fixed bug in JSR (fix was incomplete in 0.1.0)
+
 ## 0.1.0
 Released: 2016-12-14
 * Added `DAF`, a data fill assembly instruction (e.g. `DAF 256, 0xffff`)
