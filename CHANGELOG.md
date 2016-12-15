@@ -1,7 +1,7 @@
 # Changelog
 
 ## 0.1.0
-Released: TBD
+Released: 2016-12-14
 * Added `DAF`, a data fill assembly instruction (e.g. `DAF 256, 0xffff`)
 * Assembler will resolve simple arithmetic operations (addition, multiplication,
   divison) in numerical literals. Subtraction can be done through a hack
