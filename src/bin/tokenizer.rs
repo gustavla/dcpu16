@@ -1,6 +1,8 @@
 extern crate dcpu16;
 extern crate getopts;
 
+mod cli;
+
 use std::io::prelude::*;
 use std::io::BufReader;
 use std::fs::File;
@@ -13,7 +15,11 @@ use std::process::exit;
 fn main() {
     let mut opts = Options::new();
     let args: Vec<String> = env::args().collect();
-    opts.optflag("c", "canonize", "canonize");
+    let program = args[0].clone();
+
+    opts.optflag("c", "canonize", "resolves arithmetic literals before printing tokens");
+    opts.optflag("v", "version", "print version");
+    opts.optflag("h", "help", "print this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(why) => {
@@ -21,6 +27,16 @@ fn main() {
             exit(1);
         },
     };
+
+    if matches.opt_present("h") {
+        cli::print_usage(&program, "FILE", opts, &["-c program.dasm16"]);
+        return;
+    }
+
+    if matches.opt_present("v") {
+        cli::print_version(&program);
+        return;
+    }
 
     let canonize = matches.opt_present("c");
 

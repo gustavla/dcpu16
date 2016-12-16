@@ -1,19 +1,25 @@
 extern crate dcpu16;
 extern crate getopts;
 
+mod cli;
+
 use std::vec::Vec;
 use std::path::Path;
 use std::env;
 use dcpu16::dcpu;
 use dcpu16::disassembler;
+//use dcpu16::bin::cli;
 use getopts::Options;
 use std::process::exit;
 
 fn main() {
     let mut opts = Options::new();
-
     let args: Vec<String> = env::args().collect();
-    opts.optflag("p", "print", "print");
+    let program = args[0].clone();
+
+    opts.optflag("p", "print", "print CPU info each tick");
+    opts.optflag("v", "version", "print version");
+    opts.optflag("h", "help", "print this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(why) => {
@@ -21,6 +27,16 @@ fn main() {
             exit(1);
         },
     };
+
+    if matches.opt_present("h") {
+        cli::print_usage(&program, "FILE", opts, &["-p output.bin"]);
+        return;
+    }
+
+    if matches.opt_present("v") {
+        cli::print_version(&program);
+        return;
+    }
 
     if matches.free.len() != 1 {
         println!("Please input file");

@@ -1,6 +1,8 @@
 extern crate dcpu16;
 extern crate getopts;
 
+mod cli;
+
 use std::env;
 use std::fs::File;
 use std::io::Read;
@@ -14,7 +16,11 @@ use std::process::exit;
 fn main() {
     let mut opts = Options::new();
     let args: Vec<String> = env::args().collect();
-    opts.optflag("m", "no-color", "no color");
+    let program = args[0].clone();
+
+    opts.optflag("m", "no-color", "do not use ANSI colors in output");
+    opts.optflag("v", "version", "print version");
+    opts.optflag("h", "help", "print this help menu");
     let matches = match opts.parse(&args[1..]) {
         Ok(m) => { m },
         Err(why) => {
@@ -22,6 +28,16 @@ fn main() {
             exit(1);
         },
     };
+
+    if matches.opt_present("h") {
+        cli::print_usage(&program, "FILE", opts, &["program.bin"]);
+        return;
+    }
+
+    if matches.opt_present("v") {
+        cli::print_version(&program);
+        return;
+    }
 
     if matches.free.len() != 1 {
         println!("Please input file");
