@@ -5,6 +5,8 @@ use std::fs::File;
 use std::io::Read;
 use std::io::Result;
 use std::any::Any;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 use instructions::*;
 
@@ -23,7 +25,7 @@ pub const REG_J: usize = 7;
 
 const SHOW_ROWS_RADIUS: usize = 1;
 
-pub trait Hardware {
+pub trait Device {
     fn info_hardware_id_upper(&self) -> u16;
     fn info_hardware_id_lower(&self) -> u16;
     fn info_manufacturer_id_upper(&self) -> u16;
@@ -31,159 +33,8 @@ pub trait Hardware {
     fn info_version(&self) -> u16;
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
     fn as_any(&self) -> &Any;
+    fn as_any_mut(&mut self) -> &mut Any;
 }
-
-// Some example Hardware implementations
-// TODO: Possibly remove altogether from base repo
-/*
-pub struct HWMonitorLEM1802 {
-    pub connected: bool,
-    pub ram_location: u16,
-}
-
-impl Hardware for HWMonitorLEM1802 {
-    fn info_hardware_id_upper(&self) -> u16 { 0x7349 }
-    fn info_hardware_id_lower(&self) -> u16 { 0xf615 }
-    fn info_manufacturer_id_upper(&self) -> u16 { 0x1c6c }
-    fn info_manufacturer_id_lower(&self) -> u16 { 0x8b36 }
-    fn info_version(&self) -> u16 { 0x1802 }
-
-    fn process_interrupt(&mut self, cpu: &mut DCPU) -> () {
-        let a = cpu.reg[REG_A];
-        let b = cpu.reg[REG_B];
-        match a {
-            0 => { /* MEM_MAP_SCREEN */
-                if b > 0 {
-                    self.ram_location = b;
-                    self.connected = true;
-                } else {
-                    self.connected = false;
-                }
-            },
-            _ => {}
-        }
-    }
-
-    fn get_data(&self, _: &DCPU) -> Vec<u8> {
-        Vec::new()
-    }
-}
-
-const FLOPPY_MEMORY_SIZE: usize = 737280;
-const FLOPPY_SECTOR_SIZE: usize = 512;
-
-pub struct HWFloppyM35FDSector {
-    pub mem: [u16; FLOPPY_SECTOR_SIZE],
-}
-
-pub struct HWFloppyM35FD {
-    pub state: u16,
-    pub error: u16,
-    pub interrupt_message: u16,
-    pub sectors: Vec<HWFloppyM35FDSector>,
-}
-
-const ERROR_NONE: u16       = 0x0000;
-const ERROR_BUSY: u16       = 0x0001;
-const ERROR_NO_MEDIA: u16   = 0x0002;
-const ERROR_PROTECTED: u16  = 0x0003;
-const ERROR_EJECT: u16      = 0x0004;
-const ERROR_BAD_SECTOR: u16 = 0x0005;
-const ERROR_BROKEN: u16     = 0xffff;
-
-const STATE_NO_MEDIA: u16   = 0x0000;
-const STATE_READY: u16      = 0x0001;
-const STATE_READY_WP: u16   = 0x0002;
-const STATE_BUSY: u16       = 0x0003;
-
-impl HWFloppyM35FD {
-    pub fn new() -> HWFloppyM35FD {
-        HWFloppyM35FD {
-            state: 0,
-            error: 0,
-            interrupt_message: 0,
-            //mem: Box::new([0; FLOPPY_MEMORY_SIZE]),
-            sectors: Vec::new(),
-        }
-    }
-}
-
-impl Hardware for HWFloppyM35FD {
-    fn info_hardware_id_upper(&self) -> u16 { 0x4fd5 }
-    fn info_hardware_id_lower(&self) -> u16 { 0x24c5 }
-    fn info_manufacturer_id_upper(&self) -> u16 { 0x1eb3 }
-    fn info_manufacturer_id_lower(&self) -> u16 { 0x7e91 }
-    fn info_version(&self) -> u16 { 0x000b }
-
-    /*
-    fn set_error(&mut self, cpu: &mut DCPU, err: u16) -> () {
-        if err != self.error {
-            println!("Trigger DCPU interrupt!");
-        }
-    }
-    */
-
-    fn process_interrupt(&mut self, cpu: &mut DCPU) -> () {
-        let a = cpu.reg[REG_A];
-        let (old_error, old_state) = (self.error, self.state);
-
-        match a {
-            0 => { /* Poll device */
-                cpu.reg[REG_B] = self.state as u16;
-                cpu.reg[REG_C] = self.error as u16;
-                println!("Polling");
-            },
-            1 => { /* Set interrupt */
-                let x = cpu.reg[REG_X] as usize;
-                self.interrupt_message = x as u16;
-            },
-            2 => { /* Read sector */
-                let x = cpu.reg[REG_X] as usize;
-                let y = cpu.reg[REG_Y] as usize;
-
-                match self.state {
-                    STATE_NO_MEDIA => {
-                        self.error = ERROR_NO_MEDIA;
-                    },
-                    STATE_READY | STATE_READY_WP => {
-                        if x < 1440 {
-                            // TODO: Synchronous reading, for now
-                            match self.sectors.get(x) {
-                                Some(s) => {
-                                    for i in 0..512 {
-                                        cpu.mem[(y + i) % MEMORY_SIZE] = s.mem[i];
-                                    }
-                                },
-                                None => {
-                                    for i in 0..512 {
-                                        cpu.mem[(y + i) % MEMORY_SIZE] = 0;
-                                    }
-                                },
-                            }
-                            self.error = ERROR_NONE;
-                        } else {
-                            self.error = ERROR_BAD_SECTOR;
-                        }
-
-                    },
-                    _ => {
-                        self.error = ERROR_BROKEN;
-                    }
-                }
-            },
-            _ => {}
-        }
-
-        if self.state != old_state || self.error != old_error {
-            if self.interrupt_message > 0 {
-                println!("Trigger interrupt! {}", self.interrupt_message);
-            }
-        }
-    }
-}
-
-*/
-
 
 pub struct DCPU {
     pub terminate: bool,
@@ -199,7 +50,7 @@ pub struct DCPU {
     cycle: usize,
     overshot_cycles: isize,
     inside_run: bool,
-    pub devices: Vec<Box<Hardware>>,
+    pub devices: Rc<Vec<RefCell<Box<Device>>>>,
 }
 
 impl DCPU {
@@ -218,7 +69,7 @@ impl DCPU {
             cycle: 0,
             overshot_cycles: 0,
             inside_run: false,
-            devices: Vec::new(),
+            devices: Rc::new(Vec::new()),
         }
     }
 
@@ -276,7 +127,7 @@ impl DCPU {
         self.interrupt_queueing = false;
         self.overshot_cycles = 0;
         self.skip_next = false;
-        self.devices = Vec::new();
+        self.devices = Rc::new(Vec::new());
     }
 
     fn pcplus(&mut self, movepc: bool) -> u16 {
@@ -390,6 +241,13 @@ impl DCPU {
         if !truth {
             self.skip_next = true;
             self.cycle += 1;
+        }
+    }
+
+    /// Connect device
+    pub fn add_device(&mut self, device: Box<Device>) -> () {
+        if let Some(devices) = Rc::get_mut(&mut self.devices) {
+            devices.push(RefCell::new(device));
         }
     }
 
@@ -682,25 +540,8 @@ impl DCPU {
                 self.pc = new_pc;
             },
             INT => {
-                //self.cycle += 4;
                 let message = self.value(id_a, true, true);
                 self.interrupt(message);
-                //if self.ia != 0 {
-                    /*
-                    if self.interrupt_queue.is_empty() && !self.interrupt_queueing {
-                        self.interrupt_queueing = true;
-                        self.sp = self.sp.wrapping_sub(1);
-                        self.mem[self.sp as usize] = self.pc;
-                        self.sp = self.sp.wrapping_sub(1);
-                        self.mem[self.sp as usize] = self.value(REG_A, false, false);
-
-                        self.pc = self.ia;
-                        self.set(REG_A, message);
-                    } else {
-                        self.interrupt_queue.push(message);
-                    }
-                    */
-                //}
             },
             IAG => {
                 self.cycle += 1;
@@ -736,7 +577,8 @@ impl DCPU {
                 //let n_devices = self.devices.len() as u16;
                 //
                 let (i1, i2, i3, i4, i5) = match self.devices.get(device_id) {
-                    Some(d) => {
+                    Some(dref) => {
+                        let d = dref.borrow();
                         (d.info_hardware_id_lower(),
                          d.info_hardware_id_upper(),
                          d.info_version(),
@@ -756,14 +598,10 @@ impl DCPU {
             HWI => {
                 self.cycle += 4;
                 let device_id = self.value(id_a, true, true) as usize;
-                // TODO: I have to remove the device and then add it back in
-                //       I'm sure there is a better way to do this.
-                //       Also, instead of this if statement, perhaps catch
-                //       the panic potentially returned by remove.
                 if device_id < self.devices.len() {
-                    let mut device = self.devices.remove(device_id);
+                    let devices = self.devices.clone();
+                    let mut device = devices.get(device_id).unwrap().borrow_mut();
                     device.process_interrupt(self);
-                    self.devices.insert(device_id, device);
                 }
             },
             // Extensions
@@ -867,4 +705,3 @@ impl DCPU {
         */
     }
 }
-

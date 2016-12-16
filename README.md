@@ -2,38 +2,41 @@
 
 # DCPU-16
 
-DCPU-16 assembler, disassembler and emulator written in Rust 1.0.
+DCPU-16 assembler, disassembler and emulator written in Rust.
 
+DCPU-16 is a CPU specification from the never completed game 0x10c by Notch (from 2012).
 More info about the DCPU-16:
 
 * https://en.wikipedia.org/wiki/0x10c
 * https://raw.githubusercontent.com/gatesphere/demi-16/master/docs/dcpu-specs/dcpu-1-7.txt
 
-To run DCPU-16 programs with hardware devices (such as a monitor), use:
+To run DCPU-16 programs with hardware devices (such as a monitor, keyboard,
+etc.), use:
 
 * [dcpu16-gui](https://github.com/gustavla/dcpu16-gui)
 
 ## Completed features
 
-* Assembler (feature complete)
+The DCPU-16 is feature complete and ready for use:
+
+* Assembler
   * Labels
   * String literals
   * Arithmetic literals (e.g. `SET A, 0x8000+100*3`)
   * Readable error messages
-* Disassembler (feature complete)
+* Disassembler
   * Separate tokenizer
   * Colorized output
 * Emulator
-  * Basic instructions
-  * Conditionals
-  * Jumps
-  * Interrupts
-  * Some hardware support
+  * All DCPU-16 v1.7 instructions are supported
+  * Attach devices (although no devices are implemented in this repo)
+  * A few extra instructions, good for debugging and testing
 
-## Planned
+## Planned extended features
 
-* Emulator
-  * Better support for hardware
+* More unit tests
+* Concurrency support
+* Communication between DCPU-16 computers
 
 ## Binaries
 
@@ -62,7 +65,7 @@ Some extensions (possibly temporary):
      C | VAL  | NAME  | DESCRIPTION
     ---+------+-------+-------------------------------------------------------------
      0 | 0x13 | OUT a | prints a null-terminated string located at a in memory
-     0 | 0x14 | OUV a | prints a value in decimal and newline
+     0 | 0x14 | OUV a | prints a value in decimal and then a newline
     ---+------+-------+-------------------------------------------------------------
 
 Since hardware is not supported, you can use `OUT` to print to regular standard

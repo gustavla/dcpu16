@@ -3,6 +3,9 @@
 ## Next release
 Released: TBD
 * Fixed bug in JSR (fix was incomplete in 0.1.0)
+* Changed ownership structure of devices in `DCPU`
+* Renamed `Hardware` to `Device`
+* Added `as_any_mut` to `Device`
 
 ## 0.1.0
 Released: 2016-12-14
