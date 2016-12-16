@@ -1,7 +1,7 @@
 # Changelog
 
-## Next release
-Released: TBD
+## 0.2.0
+Released: 2016-12-15
 * Fixed bug in JSR (fix was incomplete in 0.1.0)
 * Changed ownership structure of devices in `DCPU`
 * Renamed `Hardware` to `Device`
