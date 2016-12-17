@@ -1,5 +1,12 @@
 # Changelog
 
+## Next release
+Released: TBD
+* Moved devices from `dcpu16-gui` crate to here
+  * `DeviceMonitorLEM1802`
+  * `DeviceKeyboardGeneric`
+  * `DeviceFloppyM35FD`
+
 ## 0.3.0
 Released: 2016-12-16
 * Add `run` to `Device`, allowing asynchronous devices (e.g. floppy drive)
