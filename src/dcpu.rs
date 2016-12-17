@@ -587,8 +587,6 @@ impl DCPU {
             HWQ => {
                 self.cycle += 4;
                 let device_id = self.value(id_a, true, true) as usize;
-                //let n_devices = self.devices.len() as u16;
-                //
                 let (i1, i2, i3, i4, i5) = match self.devices.get(device_id) {
                     Some(dref) => {
                         let d = dref.borrow();
