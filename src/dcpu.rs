@@ -32,6 +32,7 @@ pub trait Device {
     fn info_manufacturer_id_lower(&self) -> u16;
     fn info_version(&self) -> u16;
     fn process_interrupt(&mut self, cpu: &mut DCPU) -> ();
+    fn run(&mut self, cpu: &mut DCPU, cycle: usize) -> ();
     fn as_any(&self) -> &Any;
     fn as_any_mut(&mut self) -> &mut Any;
 }
@@ -261,6 +262,7 @@ impl DCPU {
         let opcode = word & 0x1f;
         let id_b = (word >> 5) & 0x1f;
         let id_a = (word >> 10) & 0x3f;
+        let old_cycle = self.cycle;
 
         if self.skip_next {
             if self.takes_next(id_a) {
@@ -509,19 +511,30 @@ impl DCPU {
         }
         if self.skip_next {
             self.tick();
-        } else if !self.interrupt_queue.is_empty() && !self.interrupt_queueing {
-            let message = self.interrupt_queue.remove(0);
-            self.cycle += 4;
+        } else {
+            if !self.interrupt_queue.is_empty() && !self.interrupt_queueing {
+                let message = self.interrupt_queue.remove(0);
+                self.cycle += 4;
 
-            if self.ia != 0 {
-                self.interrupt_queueing = true;
-                self.sp = self.sp.wrapping_sub(1);
-                self.mem[self.sp as usize] = self.pc;
-                self.sp = self.sp.wrapping_sub(1);
-                self.mem[self.sp as usize] = self.reg[REG_A];
+                if self.ia != 0 {
+                    self.interrupt_queueing = true;
+                    self.sp = self.sp.wrapping_sub(1);
+                    self.mem[self.sp as usize] = self.pc;
+                    self.sp = self.sp.wrapping_sub(1);
+                    self.mem[self.sp as usize] = self.reg[REG_A];
 
-                self.pc = self.ia;
-                self.reg[REG_A] = message;
+                    self.pc = self.ia;
+                    self.reg[REG_A] = message;
+                }
+            }
+
+            // Tick devices. This allows devices to act asynchronously.
+            // As an optimization, we might want to do this less frequently in the future.
+            let devices = self.devices.clone();
+            let delta_cycle = self.cycle - old_cycle;
+            for dref in devices.iter() {
+                let mut device = dref.borrow_mut();
+                device.run(self, delta_cycle);
             }
         }
     }
