@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.3.0
+Released: 2016-12-16
+* Add `run` to `Device`, allowing asynchronous devices (e.g. floppy drive)
+* Add `--help` and `--version` to all binaries
+
 ## 0.2.0
 Released: 2016-12-15
 * Fixed bug in JSR (fix was incomplete in 0.1.0)
