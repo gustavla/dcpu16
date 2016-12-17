@@ -1,0 +1,189 @@
+MACKAPAR 35 floppy Drive
+
+ The M35FD is a simple floppy drive.
+ 
+ ID: 0x4FD524C5
+ Manufacturer: 0x1EB37E91 (MACKAPAR)
+
+ When the drive receive a msg he read his command into the A register:
+ 
+ COMMAND        HEX         ACTION
+  
+   POLL         0x0      Write informations about the state of the 
+                         drive on B and C registers : B->State C->Error
+  
+    SET 
+  INTERRUPT     0x1      Do nothing, but in futur may be ;) 
+
+  READ SECTOR   0x2      Begin to read an entire sector number x (X register) and 
+                         copy it on the dcpu ram at the address (Y register) 
+                         During the reading the dcpu continue to run and the Drive
+                         Cannot receive read/write commands (State : Busy) 
+                         It's take at least 1668 cycles to read a sector
+ 
+  WRITE SECTOR  0x3      Begin to write an entire sector from the dcpu ram at the 
+                         address (Y register) and copy it to the sector number x 
+                         (X register)  
+                         During the writing the dcpu continue to run and the Drive
+                         Cannot receive read/write commands (State : Busy) 
+                         It's take at least 1668 cycles to write a sector
+
+  GET NUMBER    0x4      Do nothing, but in futur may be ;) 
+    TRACKS 
+
+During the poll the drive write state and error on B and C register
+Here is the list of all possibles codes
+The States are :
+  State         HEX        Description 
+
+ NO MEDIA       0x0        There is no floppy in the drive
+ 
+   READY        0x1        The drive is ready to read/write the floppy
+
+  READY WP      0x2        The drive is ready to ONLY read the floppy 
+  
+   BUSY         0x3        The drive is busy either reading or writing a sector
+
+
+The Errors ares:
+  Error         HEX        Description
+ 
+  NONE          0x0        No error since the last poll
+
+  BUSY          0x1        Drive is busy performning a action
+ 
+  NO MEDIA      0x2        Attempted to read or write without a floppy
+
+  PROTECTED     0x3        Attempted to write to a protected floppy
+ 
+  EJECT         0x4        The floppy was ejected while was reading/writing 
+ 
+  BAD SECTOR    0x5        The requested sector is broken, the data on it is lost
+
+  BROKEN        0xFFFF     There's been some major software/hardware problem. 
+                           Try to do a hard reset the device
+
+
+M35FD floppy disk image (.dsk)
+
+ File structure must be like this :
+ 
+ Bytes      0          1          2          3           4
+            ----------------------------------------------
+ Head:      #   Type   | Version  #  Unused  |   Tracks  |
+            ----------------------------------------------
+            |                   Data                     |
+            |                  size =                    |
+            |  Tracks * SECTORS_PER_TRACK * SECTOR_SIZE  |
+            |                                            |
+            ----------------------------------------------
+            |             Bad Sectors BitMap             |
+            |                   size =                   |
+            |          Tracks * SECTORS_PER_TRACK / 8    |
+            |                                            |
+            ----------------------------------------------
+
+ SECTOR_SIZE: 512 Bytes
+ SECTORS_PER_TRACK: 18
+ 
+
+ Header:
+ Type = 'F' (Floppy image)
+ Version = 1
+ This kind of header will allow future upgrades and if we need diferent
+ data files (cassetes, tapes, hard disk, etc...), we will share the same
+ basic header.
+
+ Floppy data:
+ Tracks : Number of tracks, should be 40,80 or 160, I don't expect any other
+ track size.
+
+ Data: RAW data. To access a particular sector, you only need to read at
+     (4 + sector * SECTOR_SIZE)
+ 
+ BitMap:
+ The bitmap stores 8 sectors state in each byte. It uses the MSB bit for 
+ the lowest sector and LSB for the bigger sector.
+ To read is a particular sector is bad, you read the byte at
+     ( (4 + Size of Data secction) + 
+         (sector /8 ) & 128 >> (sector % 8) ) != 0
+ The RAW data will be read/write directly to the file, but the bitmap will
+ be keep in RAM for quick read of it.
+
+ Note: a 3"5 floppy have only 80 tracks but 2 faces (so 160 tracks)
+ In out case the double face of the floppy is not emulated so to have a
+ 1.44MB like real 3"5 floppy we simply 2x the number of tracks -> 160
+
+
+Floppy partitions
+
+ The actuals Floppy specs are not compatibles with standarts floppy
+ so i decided to implement my own partion system FP16
+
+
+Floppy Sector0
+ The sector 0 of a floppy contains informations about partitions  
+ 
+ WORD                     DESCRIPTION
+
+   0x0       
+    .        Ignored. May contains SET PC,Whatever instruction for 
+    .        compatibility with others systems
+   0x2        
+            
+   0x3       Magic   (0x16) Indicate FP16 Partition system
+   0x4       Version (0x1) 
+
+   0x5       Boot Partition Size (0x0 if non bootable) in sectors
+   0x6       Boot Partition Sector Begin (usually 0x1 if bootable) 
+             Ignored if 0x5 is 0.
+
+   0x7       Table partition Size in sectors (usually 0x59)
+   0x8       Sector of Root folder Table (first table)
+
+   0x9       Data Partition Size in sectors (usually 0x55F if non bootable)
+   0xA       Data Partition Begin Sector
+
+   0xB       Fast alloc sector : first data sector that is free 
+             (0x0 if not available)
+
+   0xC  
+    .        Null-terminated string that represent the 
+    .        Floppy Name 
+    .
+   0x2C      
+
+   
+   0x2D
+    .
+    .        Ignored ! can be used in futur
+    .
+   0x200           
+
+
+
+
+----------
+This file was taken from https://github.com/Zardoz89/dcpu_vm
+License is as follows:
+----------
+The MIT License (MIT)
+
+Copyright (c) 2013 Luis
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
