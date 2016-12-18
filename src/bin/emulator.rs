@@ -84,7 +84,7 @@ fn main() {
     } else { // If printing is not on, then the CPU will run roughly at 100 kHz
         let cycles = dcpu::CYCLE_HZ / FPS;
         while !cpu.terminate {
-            let now = time::Instant::now();
+            //let now = time::Instant::now();
             cpu.run(cycles);
             //let elapsed = now.elapsed();
             // TODO: Use elapsed to sleep slightly shorter to get timing right
