@@ -31,6 +31,7 @@ The DCPU-16 is feature complete and ready for use:
   * A few extra instructions, good for debugging and testing
   * Devices
     * Monitor (LEM1802)
+    * Clock
     * Keyboard
     * Floppy drive (M35FD)
 
