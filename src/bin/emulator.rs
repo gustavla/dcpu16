@@ -5,12 +5,16 @@ mod cli;
 
 use std::vec::Vec;
 use std::path::Path;
-use std::env;
+use std::{env, thread, time};
 use dcpu16::dcpu;
 use dcpu16::disassembler;
 //use dcpu16::bin::cli;
 use getopts::Options;
 use std::process::exit;
+
+use dcpu16::devices::clock_generic::DeviceClockGeneric;
+
+const FPS: usize = 30;
 
 fn main() {
     let mut opts = Options::new();
@@ -65,16 +69,26 @@ fn main() {
     cpu.devices.push(floppy);
     */
 
-    loop {
-        let (_, s) = disassembler::disassemble_instruction(&cpu, true);
-        if print {
+    let clock = DeviceClockGeneric::new();
+    cpu.add_device(Box::new(clock));
+
+    // If printing is turned on, CPU will tick through (without proper timing)
+    if print {
+        while !cpu.terminate {
+            cpu.tick();
+            let (_, s) = disassembler::disassemble_instruction(&cpu, true);
             println!("---------------------------------------------");
             println!("::: {}", s);
             cpu.print();
         }
-        cpu.tick();
-        if cpu.terminate {
-            break;
+    } else { // If printing is not on, then the CPU will run roughly at 100 kHz
+        let cycles = dcpu::CYCLE_HZ / FPS;
+        while !cpu.terminate {
+            let now = time::Instant::now();
+            cpu.run(cycles);
+            //let elapsed = now.elapsed();
+            // TODO: Use elapsed to sleep slightly shorter to get timing right
+            thread::sleep(time::Duration::from_millis((1000 / FPS) as u64));
         }
     }
 }

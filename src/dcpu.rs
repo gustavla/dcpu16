@@ -23,6 +23,8 @@ pub const REG_Z: usize = 5;
 pub const REG_I: usize = 6;
 pub const REG_J: usize = 7;
 
+pub const CYCLE_HZ: usize = 100_000;
+
 const SHOW_ROWS_RADIUS: usize = 1;
 
 pub trait Device {

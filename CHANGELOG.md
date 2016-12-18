@@ -6,6 +6,8 @@ Released: TBD
   * `DeviceMonitorLEM1802`
   * `DeviceKeyboardGeneric`
   * `DeviceFloppyM35FD`
+* Added generic clock device (`DeviceGenericClock`)
+* Added timing when running `dcpu16`
 
 ## 0.3.0
 Released: 2016-12-16
