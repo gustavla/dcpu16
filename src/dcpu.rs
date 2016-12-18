@@ -661,7 +661,7 @@ impl DCPU {
         Ok(())
     }
 
-    // This function will assemble the binary for you, so the input file should be a .dasm16 file.
+    // This function will assemble the binary for you, so the input file should be a .asm file.
     //pub fn load_from_assembly_file(&mut self, path: &Path) -> Result<()> {
         // TODO
     //}

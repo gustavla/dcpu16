@@ -30,7 +30,7 @@ fn main() {
     };
 
     if matches.opt_present("h") {
-        cli::print_usage(&program, "FILE", opts, &["program.dasm16 -o program.bin"]);
+        cli::print_usage(&program, "FILE", opts, &["program.asm -o program.bin"]);
         return;
     }
 

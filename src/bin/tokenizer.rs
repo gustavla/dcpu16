@@ -29,7 +29,7 @@ fn main() {
     };
 
     if matches.opt_present("h") {
-        cli::print_usage(&program, "FILE", opts, &["-c program.dasm16"]);
+        cli::print_usage(&program, "FILE", opts, &["-c program.asm"]);
         return;
     }
 

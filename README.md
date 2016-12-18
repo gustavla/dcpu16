@@ -87,7 +87,7 @@ Extensions to the assembler:
 
 ## Example
 
-Save the following as `prog.dasm16`:
+Save the following as `prog.asm`:
 
                 OUT hello                   ; Print the string defined at 'hello'
                 DAT 0                       ; This will terminate the program    
@@ -96,7 +96,7 @@ Save the following as `prog.dasm16`:
 
 Assemble the program:
 
-    $ assembler prog.dasm16 -o prog.bin
+    $ assembler prog.asm -o prog.bin
 
 Run it:
 
