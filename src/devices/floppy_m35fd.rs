@@ -5,6 +5,8 @@ use std::any::Any;
 const FLOPPY_SECTOR_SIZE: usize = 512;
 const FLOPPY_NUM_SECTORS: usize = 1440;
 
+// TODO: Calculate these from dcpu::CYCLE_HZ
+
 // Read/write speed is 30700 words/second
 // The DCPU-16 runs at 100 kHz, so a sector of size 512 words will take
 // 512 / 30700 * 100000 = 1667 cycles to complete
@@ -202,11 +204,11 @@ impl Device for DeviceFloppyM35FD {
         }
     }
 
-    fn run(&mut self, cpu: &mut DCPU, cycle: usize) -> () {
+    fn run(&mut self, cpu: &mut DCPU, cycles: usize) -> () {
         match self.internal_state {
             FloppyInternalState::WaitToRead => {
-                if self.rw_wait_cycles > cycle {
-                    self.rw_wait_cycles -= cycle;
+                if self.rw_wait_cycles > cycles {
+                    self.rw_wait_cycles -= cycles;
                 } else {
                     self.internal_state = FloppyInternalState::Idle;
                     self.rw_wait_cycles = 0;
@@ -241,8 +243,8 @@ impl Device for DeviceFloppyM35FD {
                 }
             },
             FloppyInternalState::WaitToWrite => {
-                if self.rw_wait_cycles > cycle {
-                    self.rw_wait_cycles -= cycle;
+                if self.rw_wait_cycles > cycles {
+                    self.rw_wait_cycles -= cycles;
                 } else {
                     self.internal_state = FloppyInternalState::Idle;
                     self.rw_wait_cycles = 0;

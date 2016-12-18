@@ -101,11 +101,11 @@ impl Device for DeviceKeyboardGeneric {
             0 => { // Clear keyboard buffer
                 self.buffer.clear();
             },
-            1 => {
+            1 => { // Pop from buffer queue
                 let v = self.buffer.pop().unwrap_or(0);
                 cpu.reg[dcpu::REG_C] = v;
             },
-            2 => {
+            2 => { // Check if pressed
                 let key = cpu.reg[dcpu::REG_B];
                 cpu.reg[dcpu::REG_C] = if key < 0x92 && self.pressed[key as usize] {
                     1
@@ -113,7 +113,7 @@ impl Device for DeviceKeyboardGeneric {
                     0
                 };
             },
-            3 => {
+            3 => { // Set interrupt
                 self.interrupt_message = if reg_b != 0 {
                     Some(reg_b)
                 } else {
@@ -134,5 +134,3 @@ impl Device for DeviceKeyboardGeneric {
         self
     }
 }
-
-
