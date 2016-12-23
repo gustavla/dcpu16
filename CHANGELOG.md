@@ -1,7 +1,7 @@
 # Changelog
 
-## Next release
-Released: TBD
+## 0.4.0
+Released: 2016-12-17
 * Moved devices from `dcpu16-gui` crate to here
   * `DeviceMonitorLEM1802`
   * `DeviceKeyboardGeneric`
